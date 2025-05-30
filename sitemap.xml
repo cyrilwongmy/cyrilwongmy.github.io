@@ -2,9 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://cyrilwongmy.github.io/categories/</loc>
+    <loc>https://cyrilwongmy.github.io/blog/</loc>
+    <lastmod>2025-05-29T22:03:53-07:00</lastmod>
+  </url><url>
+    <loc>https://cyrilwongmy.github.io/blog/01-kafka-01-tcp-fragmentation/</loc>
+    <lastmod>2025-05-29T22:03:53-07:00</lastmod>
   </url><url>
     <loc>https://cyrilwongmy.github.io/</loc>
+    <lastmod>2025-05-29T22:03:53-07:00</lastmod>
+  </url><url>
+    <loc>https://cyrilwongmy.github.io/categories/</loc>
   </url><url>
     <loc>https://cyrilwongmy.github.io/tags/</loc>
   </url>
