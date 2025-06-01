@@ -6,8 +6,19 @@
     <description>Recent content in Blogs on Mingyan&#39;s blog</description>
     <generator>Hugo -- 0.147.3</generator>
     <language>en-us</language>
-    <lastBuildDate>Thu, 29 May 2025 22:03:53 -0700</lastBuildDate>
+    <lastBuildDate>Sun, 01 Jun 2025 00:02:56 -0700</lastBuildDate>
     <atom:link href="https://cyrilwongmy.github.io/blog/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Kafka High-Throughput Architecture: Demystifying the Reactor Pattern (Part 2)</title>
+      <link>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</link>
+      <pubDate>Sun, 01 Jun 2025 00:02:56 -0700</pubDate>
+      <guid>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</guid>
+      <description>&lt;h1 id=&#34;what-is-the-reactor-pattern&#34;&gt;What is the Reactor Pattern?&lt;/h1&gt;
+&lt;p&gt;&lt;em&gt;(Readers familiar with the Reactor pattern can skip to the &lt;a href=&#34;#kafka-s-reactor-implementation&#34;&gt;Kafka&amp;rsquo;s Reactor Implementation&lt;/a&gt; section)&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Understanding the Reactor pattern requires starting with the evolution of fundamental network I/O models: from blocking I/O to multithreading and pooling techniques, then to non-blocking I/O, culminating in the Reactor pattern.&lt;/p&gt;
+&lt;h2 id=&#34;blocking-io-non-blocking-io-and-asynchronous-io-aio&#34;&gt;Blocking I/O, Non-blocking I/O, and Asynchronous I/O (AIO)&lt;/h2&gt;
+&lt;p&gt;To discuss Reactor, we begin with the basic TCP network I/O processing flow. Programming languages typically provide a &lt;strong&gt;&lt;code&gt;Socket&lt;/code&gt;&lt;/strong&gt; API. First, create a listening &lt;strong&gt;&lt;code&gt;Socket&lt;/code&gt;&lt;/strong&gt; (&lt;strong&gt;&lt;code&gt;serverSocket&lt;/code&gt;&lt;/strong&gt;), &lt;strong&gt;&lt;code&gt;bind&lt;/code&gt;&lt;/strong&gt; it to a port, and &lt;strong&gt;&lt;code&gt;listen&lt;/code&gt;&lt;/strong&gt;. Then call the &lt;strong&gt;&lt;code&gt;accept&lt;/code&gt;&lt;/strong&gt; method to &lt;strong&gt;block&lt;/strong&gt; and wait for client connections. When &lt;strong&gt;&lt;code&gt;accept&lt;/code&gt;&lt;/strong&gt; returns, you obtain a unique &lt;strong&gt;&lt;code&gt;Socket&lt;/code&gt;&lt;/strong&gt; (&lt;strong&gt;&lt;code&gt;connectionSocket&lt;/code&gt;&lt;/strong&gt;) representing that connection. Next, call &lt;strong&gt;&lt;code&gt;read&lt;/code&gt;&lt;/strong&gt; and &lt;strong&gt;&lt;code&gt;write&lt;/code&gt;&lt;/strong&gt; on this &lt;strong&gt;&lt;code&gt;connectionSocket&lt;/code&gt;&lt;/strong&gt; for data transfer.&lt;/p&gt;</description>
+    </item>
     <item>
       <title>Kafka’s TCP Unpacking: A Production-Grade Code Walkthrough (Part 1)</title>
       <link>https://cyrilwongmy.github.io/blog/01-kafka-01-tcp-fragmentation/</link>
