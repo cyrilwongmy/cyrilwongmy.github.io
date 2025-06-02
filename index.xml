@@ -13,24 +13,23 @@
       <link>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</link>
       <pubDate>Sun, 01 Jun 2025 00:02:56 -0700</pubDate>
       <guid>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</guid>
-      <description>&lt;h1 id=&#34;what-is-the-reactor-pattern&#34;&gt;What is the Reactor Pattern?&lt;/h1&gt;
-&lt;p&gt;&lt;em&gt;(Readers familiar with the Reactor pattern can skip to the &lt;a href=&#34;#kafka-s-reactor-implementation&#34;&gt;Kafka&amp;rsquo;s Reactor Implementation&lt;/a&gt; section)&lt;/em&gt;&lt;/p&gt;
-&lt;p&gt;Understanding the Reactor pattern requires starting with the evolution of fundamental network I/O models: from blocking I/O to multithreading and pooling techniques, then to non-blocking I/O, culminating in the Reactor pattern.&lt;/p&gt;
-&lt;h2 id=&#34;blocking-io-non-blocking-io-and-asynchronous-io-aio&#34;&gt;Blocking I/O, Non-blocking I/O, and Asynchronous I/O (AIO)&lt;/h2&gt;
-&lt;p&gt;To discuss Reactor, we begin with the basic TCP network I/O processing flow. Programming languages typically provide a &lt;strong&gt;&lt;code&gt;Socket&lt;/code&gt;&lt;/strong&gt; API. First, create a listening &lt;strong&gt;&lt;code&gt;Socket&lt;/code&gt;&lt;/strong&gt; (&lt;strong&gt;&lt;code&gt;serverSocket&lt;/code&gt;&lt;/strong&gt;), &lt;strong&gt;&lt;code&gt;bind&lt;/code&gt;&lt;/strong&gt; it to a port, and &lt;strong&gt;&lt;code&gt;listen&lt;/code&gt;&lt;/strong&gt;. Then call the &lt;strong&gt;&lt;code&gt;accept&lt;/code&gt;&lt;/strong&gt; method to &lt;strong&gt;block&lt;/strong&gt; and wait for client connections. When &lt;strong&gt;&lt;code&gt;accept&lt;/code&gt;&lt;/strong&gt; returns, you obtain a unique &lt;strong&gt;&lt;code&gt;Socket&lt;/code&gt;&lt;/strong&gt; (&lt;strong&gt;&lt;code&gt;connectionSocket&lt;/code&gt;&lt;/strong&gt;) representing that connection. Next, call &lt;strong&gt;&lt;code&gt;read&lt;/code&gt;&lt;/strong&gt; and &lt;strong&gt;&lt;code&gt;write&lt;/code&gt;&lt;/strong&gt; on this &lt;strong&gt;&lt;code&gt;connectionSocket&lt;/code&gt;&lt;/strong&gt; for data transfer.&lt;/p&gt;</description>
+      <description>&lt;p&gt;This is part 2 of the Kafka series. In this part, we will dive into the Reactor pattern and how Kafka implements it. In the next following series, we will dive into each component of the Reactor pattern.&lt;/p&gt;
+&lt;p&gt;The source code referenced in this article uses Kafka&amp;rsquo;s trunk branch. I&amp;rsquo;ve pushed it to my personal repo for version alignment with this article:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&#34;https://github.com/cyrilwongmy/kafka-src-reading&#34;&gt;https://github.com/cyrilwongmy/kafka-src-reading&lt;/a&gt;&lt;/p&gt;
+&lt;h1 id=&#34;what-is-the-reactor-pattern&#34;&gt;What is the Reactor Pattern?&lt;/h1&gt;
+&lt;p&gt;&lt;em&gt;(Readers familiar with the Reactor pattern can skip to the &lt;a href=&#34;#kafka-s-reactor-implementation&#34;&gt;Kafka&amp;rsquo;s Reactor Implementation&lt;/a&gt; section)&lt;/em&gt;&lt;/p&gt;</description>
     </item>
     <item>
       <title>Kafka’s TCP Unpacking: A Production-Grade Code Walkthrough (Part 1)</title>
       <link>https://cyrilwongmy.github.io/blog/01-kafka-01-tcp-fragmentation/</link>
       <pubDate>Thu, 29 May 2025 22:03:53 -0700</pubDate>
       <guid>https://cyrilwongmy.github.io/blog/01-kafka-01-tcp-fragmentation/</guid>
-      <description>&lt;p&gt;The source code referenced in this article uses Kafka&amp;rsquo;s trunk branch. I&amp;rsquo;ve pushed it to my personal repo for version alignment with this article:&lt;/p&gt;
+      <description>&lt;p&gt;This is part 1 of the Kafka series. The Kafka series is a series of blog posts that will introduce the design and implementation details of Kafka.&lt;/p&gt;
+&lt;p&gt;The source code referenced in this article uses Kafka&amp;rsquo;s trunk branch. I&amp;rsquo;ve pushed it to my personal repo for version alignment with this article:&lt;/p&gt;
 &lt;p&gt;&lt;a href=&#34;https://github.com/cyrilwongmy/kafka-src-reading&#34;&gt;https://github.com/cyrilwongmy/kafka-src-reading&lt;/a&gt;&lt;/p&gt;
 &lt;h1 id=&#34;tcp-and-packet-fragmentation&#34;&gt;&lt;strong&gt;TCP and Packet Fragmentation&lt;/strong&gt;&lt;/h1&gt;
 &lt;h2 id=&#34;why-does-tcp-require-packet-fragmentation&#34;&gt;&lt;strong&gt;Why Does TCP Require Packet Fragmentation?&lt;/strong&gt;&lt;/h2&gt;
-&lt;p&gt;Kafka uses TCP as its underlying transport layer protocol. TCP operates as a continuous byte stream without inherent message boundaries. Therefore, any application using TCP must implement its own mechanism to delineate message boundaries.&lt;/p&gt;
-&lt;h2 id=&#34;how-to-implement-packet-fragmentation&#34;&gt;&lt;strong&gt;How to Implement Packet Fragmentation?&lt;/strong&gt;&lt;/h2&gt;
-&lt;p&gt;When writing data to TCP, the sender must explicitly mark message boundaries. Typically, we first write a fixed 4-byte header indicating the size of the subsequent message (4 bytes can represent messages up to 4GB). The receiver first reads these 4 bytes to determine the &lt;strong&gt;&lt;code&gt;message_size&lt;/code&gt;&lt;/strong&gt;, then reads exactly &lt;strong&gt;&lt;code&gt;message_size&lt;/code&gt;&lt;/strong&gt; bytes from the network to reconstruct the complete message.&lt;/p&gt;</description>
+&lt;p&gt;Kafka uses TCP as its underlying transport layer protocol. TCP operates as a continuous byte stream without inherent message boundaries. Therefore, any application using TCP must implement its own mechanism to delineate message boundaries.&lt;/p&gt;</description>
     </item>
   </channel>
 </rss>

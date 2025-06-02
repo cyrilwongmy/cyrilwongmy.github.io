@@ -163,9 +163,10 @@
     </h2>
   </header>
   <div class="entry-content">
-    <p>What is the Reactor Pattern? (Readers familiar with the Reactor pattern can skip to the Kafka’s Reactor Implementation section)
-Understanding the Reactor pattern requires starting with the evolution of fundamental network I/O models: from blocking I/O to multithreading and pooling techniques, then to non-blocking I/O, culminating in the Reactor pattern.
-Blocking I/O, Non-blocking I/O, and Asynchronous I/O (AIO) To discuss Reactor, we begin with the basic TCP network I/O processing flow. Programming languages typically provide a Socket API. First, create a listening Socket (serverSocket), bind it to a port, and listen. Then call the accept method to block and wait for client connections. When accept returns, you obtain a unique Socket (connectionSocket) representing that connection. Next, call read and write on this connectionSocket for data transfer.
+    <p>This is part 2 of the Kafka series. In this part, we will dive into the Reactor pattern and how Kafka implements it. In the next following series, we will dive into each component of the Reactor pattern.
+The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
+https://github.com/cyrilwongmy/kafka-src-reading
+What is the Reactor Pattern? (Readers familiar with the Reactor pattern can skip to the Kafka’s Reactor Implementation section)
 ...</p>
   </div>
   <footer class="entry-footer"><span title='2025-06-01 00:02:56 -0700 PDT'>June 1, 2025</span></footer>
@@ -178,10 +179,10 @@ Blocking I/O, Non-blocking I/O, and Asynchronous I/O (AIO) To discuss Reactor, w
     </h2>
   </header>
   <div class="entry-content">
-    <p>The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
+    <p>This is part 1 of the Kafka series. The Kafka series is a series of blog posts that will introduce the design and implementation details of Kafka.
+The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
 https://github.com/cyrilwongmy/kafka-src-reading
 TCP and Packet Fragmentation Why Does TCP Require Packet Fragmentation? Kafka uses TCP as its underlying transport layer protocol. TCP operates as a continuous byte stream without inherent message boundaries. Therefore, any application using TCP must implement its own mechanism to delineate message boundaries.
-How to Implement Packet Fragmentation? When writing data to TCP, the sender must explicitly mark message boundaries. Typically, we first write a fixed 4-byte header indicating the size of the subsequent message (4 bytes can represent messages up to 4GB). The receiver first reads these 4 bytes to determine the message_size, then reads exactly message_size bytes from the network to reconstruct the complete message.
 ...</p>
   </div>
   <footer class="entry-footer"><span title='2025-05-29 22:03:53 -0700 PDT'>May 29, 2025</span></footer>
