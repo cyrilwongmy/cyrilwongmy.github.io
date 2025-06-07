@@ -6,8 +6,19 @@
     <description>Recent content in Blogs on Mingyan&#39;s blog</description>
     <generator>Hugo -- 0.147.3</generator>
     <language>en-us</language>
-    <lastBuildDate>Sun, 01 Jun 2025 00:02:56 -0700</lastBuildDate>
+    <lastBuildDate>Fri, 06 Jun 2025 23:11:18 -0700</lastBuildDate>
     <atom:link href="https://cyrilwongmy.github.io/blog/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)</title>
+      <link>https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/</link>
+      <pubDate>Fri, 06 Jun 2025 23:11:18 -0700</pubDate>
+      <guid>https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/</guid>
+      <description>&lt;h1 id=&#34;why-did-kafka-reinvent-rpc&#34;&gt;Why Did Kafka Re‑Invent RPC?&lt;/h1&gt;
+&lt;h2 id=&#34;11-performance&#34;&gt;1.1 Performance&lt;/h2&gt;
+&lt;p&gt;HTTP 1.x and gRPC are convenient, but too heavyweight for a &lt;strong&gt;high‑throughput, low‑latency &lt;em&gt;durable&lt;/em&gt; log&lt;/strong&gt;. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf&amp;rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.&lt;/p&gt;
+&lt;h2 id=&#34;12-seamless-evolution&#34;&gt;1.2 Seamless Evolution&lt;/h2&gt;
+&lt;p&gt;The Apache community&amp;rsquo;s &amp;ldquo;&lt;strong&gt;don&amp;rsquo;t break users&lt;/strong&gt;&amp;rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with &lt;strong&gt;tagged fields&lt;/strong&gt; that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.&lt;/p&gt;</description>
+    </item>
     <item>
       <title>Kafka High-Throughput Architecture: Demystifying the Reactor Pattern (Part 2)</title>
       <link>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</link>

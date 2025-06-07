@@ -159,6 +159,20 @@
 
 <article class="post-entry"> 
   <header class="entry-header">
+    <h2 class="entry-hint-parent">An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>Why Did Kafka Re‑Invent RPC? 1.1 Performance HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf’s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.
+1.2 Seamless Evolution The Apache community’s “don’t break users” philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.
+...</p>
+  </div>
+  <footer class="entry-footer"><span title='2025-06-06 23:11:18 -0700 PDT'>June 6, 2025</span></footer>
+  <a class="entry-link" aria-label="post link to An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)" href="https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
     <h2 class="entry-hint-parent">Kafka High-Throughput Architecture: Demystifying the Reactor Pattern (Part 2)
     </h2>
   </header>

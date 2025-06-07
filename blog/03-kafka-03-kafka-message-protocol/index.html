@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3) | Mingyan&#39;s blog</title>
+<meta name="keywords" content="">
+<meta name="description" content="Why Did Kafka Re‑Invent RPC?
+1.1 Performance
+HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf&rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.
+1.2 Seamless Evolution
+The Apache community&rsquo;s &ldquo;don&rsquo;t break users&rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.">
+<meta name="author" content="">
+<link rel="canonical" href="https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.f49d66caae9ea0fd43f21f29e71a8d3e284517ed770f2aa86fa012953ad3c9ef.css" integrity="sha256-9J1myq6eoP1D8h8p5xqNPihFF&#43;13Dyqob6ASlTrTye8=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://cyrilwongmy.github.io/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="https://cyrilwongmy.github.io/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://cyrilwongmy.github.io/favicon-32x32.png">
+<link rel="apple-touch-icon" href="https://cyrilwongmy.github.io/apple-touch-icon.png">
+<link rel="mask-icon" href="https://cyrilwongmy.github.io/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/">
+  <meta property="og:site_name" content="Mingyan&#39;s blog">
+  <meta property="og:title" content="An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)">
+  <meta property="og:description" content="Why Did Kafka Re‑Invent RPC? 1.1 Performance HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf’s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.
+1.2 Seamless Evolution The Apache community’s “don’t break users” philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="blog">
+    <meta property="article:published_time" content="2025-06-06T23:11:18-07:00">
+    <meta property="article:modified_time" content="2025-06-06T23:11:18-07:00">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)">
+<meta name="twitter:description" content="Why Did Kafka Re‑Invent RPC?
+1.1 Performance
+HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf&rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.
+1.2 Seamless Evolution
+The Apache community&rsquo;s &ldquo;don&rsquo;t break users&rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Blogs",
+      "item": "https://cyrilwongmy.github.io/blog/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)",
+      "item": "https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)",
+  "name": "An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)",
+  "description": "Why Did Kafka Re‑Invent RPC? 1.1 Performance HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf\u0026rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.\n1.2 Seamless Evolution The Apache community\u0026rsquo;s \u0026ldquo;don\u0026rsquo;t break users\u0026rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.\n",
+  "keywords": [
+    
+  ],
+  "articleBody": "Why Did Kafka Re‑Invent RPC? 1.1 Performance HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf’s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.\n1.2 Seamless Evolution The Apache community’s “don’t break users” philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.\n1.3 Built‑in Batching For streaming workloads, sending one‑message‑per‑request is catastrophically inefficient. Instead, Kafka multiplexes multiple records over a single connection. This enables sequential disk writes and continuous TCP segments, dramatically reducing both syscall count and network jitter.\n2 Anatomy of ProduceRequest The ProduceRequest is structured in memory as a class that contains other classes as fields. When serialized, it converts all its fields into a binary format, which is illustrated in the image below. The in-memory representation and serialized version are nearly identical, with the addition of length fields that mark where each field ends. We will explain why the length fields matter shortly.\nLevel Field Type Meaning Example 0 acks INT16 Required replica acknowledgements ‑1 (all ISRs) 0 timeoutMs INT32 Hard write timeout (ms) 30000 0 topicData.length INT32 Number of TopicProduceData 2 1 name STRING Topic name \"orders\" 1 partitionData.length INT32 Number of PartitionProduceData 3 2 index INT32 Partition index 0 2 recordSetSize INT32 Size of the record set (bytes) 1024 2 recordSet BYTES Compressed batch of messages … 2.1 Why Length Fields Matter In OSI Layer 4, TCP guarantees byte‑stream ordering but not message boundaries. This means that without explicit size indicators, a receiver cannot determine where one logical request ends and another begins. As a result, every ARRAY / STRING / BYTES field in ProduceRequest follows a length → payload structure.\n📌 Rules of Thumb\nSize ≤ 255 → UINT8 saves space 256 ≤ size ≤ 65535 → UINT16 (Java short) Larger → fall back to UINT32 3 Serialization ( write ) The snippet below is auto‑generated by Kafka for ProduceRequestData; comments were added for clarity. Some variable names and logic are modified for better understanding and clarity.\nThe TopicProduceData recursively calls the write function for all nested classes, such as PartitionProduceData.\n@Override public void write(Writable out, ObjectCache cache, short ver) { /* —— Core scalars —— */ out.writeShort(acks); // (1) int16 out.writeInt(timeoutMs); // (2) int32 /* —— TopicProduceData list —— */ out.writeInt(topicData.size()); for (TopicProduceData t : topicData) { t.write(out, cache, ver); // recursive serialization } /* —— Tagged fields for forward‑compat —— */ RawTaggedFieldWriter rw = RawTaggedFieldWriter.forFields(unknownTags); if (ver \u003e= 9) { out.writeUnsignedVarint(rw.numFields()); rw.writeRawTags(out, Integer.MAX_VALUE); } else if (rw.numFields() \u003e 0) { throw new UnsupportedVersionException(\"Tagged fields unsupported in \" + ver); } } 3.1 Why Use a Code Generator? Fat-finger Proof — Automatically validates ordering, sizes, and nullability through script checking. Version Auto-Derivation — Simply update the JSON spec and run a Gradle task to generate new code branches in write/read. Unified Caching — Uses ObjectCache to prevent redundant UTF-8 encoding across multiple fields. 4 Deserialization ( read ) read mirrors write but adds defensive checks:\n@Override public void read(Readable in, short ver) { acks = in.readShort(); timeoutMs = in.readInt(); int topicCnt = in.readInt(); if (topicCnt \u003c 0 || topicCnt \u003e in.remaining()) { throw new CorruptRecordException(\"Invalid topicCnt: \" + topicCnt); } topicData = new TopicProduceDataCollection(topicCnt); for (int i = 0; i \u003c topicCnt; i++) { topicData.add(new TopicProduceData(in, ver)); } if (ver \u003e= 9) { int tagCnt = in.readUnsignedVarint(); for (int i = 0; i \u003c tagCnt; i++) { int tagId = in.readUnsignedVarint(); int size = in.readUnsignedVarint(); unknownTags = in.readUnknownTaggedField(unknownTags, tagId, size); } } } 4.1 Three Rules to Avoid Bugs Never over-read — throw an exception if remaining() is less than expected bytes. Never over-allocate — prevent DoS attacks by rejecting unreasonably large sizes (over 1 million). Gracefully skip tags — store unknown IDs in unknownTags to maintain forward compatibility. 5 Making the Protocol Fast and Safe 5.1 Forward‑/Backward Compatibility Cheatsheet Scenario Strategy Benefit Add a field Append to tail or use a tagged field Old clients ignore it Remove field Markdeprecated, keep parser Old data can still replay Widen field Dual‑write / dual‑read, then retire old Online upgrades stay safe 5.2 Zero‑Copy in Practice Sender — FileChannel.transferTo(socketFd) → sendfile(2) → DMA → NIC. Receiver — epoll (edge‑triggered) + mmap to persist sequentially, bypassing extra kernel copies. Note: True “zero copy” doesn’t exist—we’re referring to zero copies in user space.\n5.3 Batch + Compression = Throughput Boost Send multiple messages in a single request Compress messages fields to reduce the size of the request 6 Takeaways A custom binary RPC protocol consists of two mirrored operations: recursive write / recursive read. All fields with variable sizes must include a length prefix—this is essential for peers to determine message boundaries. Kafka achieves both flexibility and speed through its combination of tagged fields, zero-copy operations, and batch compression. Next Up — We’ll trace sendfile operations, stay tuned!\n",
+  "wordCount" : "853",
+  "inLanguage": "en",
+  "datePublished": "2025-06-06T23:11:18-07:00",
+  "dateModified": "2025-06-06T23:11:18-07:00",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Mingyan's blog",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://cyrilwongmy.github.io/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://cyrilwongmy.github.io/" accesskey="h" title="Mingyan&#39;s blog (Alt + H)">Mingyan&#39;s blog</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)" aria-label="Toggle theme">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    
+    <h1 class="post-title entry-hint-parent">
+      An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)
+    </h1>
+    <div class="post-meta"><span title='2025-06-06 23:11:18 -0700 PDT'>June 6, 2025</span>
+
+</div>
+  </header> 
+  <div class="post-content"><h1 id="why-did-kafka-reinvent-rpc">Why Did Kafka Re‑Invent RPC?<a hidden class="anchor" aria-hidden="true" href="#why-did-kafka-reinvent-rpc">#</a></h1>
+<h2 id="11-performance">1.1 Performance<a hidden class="anchor" aria-hidden="true" href="#11-performance">#</a></h2>
+<p>HTTP 1.x and gRPC are convenient, but too heavyweight for a <strong>high‑throughput, low‑latency <em>durable</em> log</strong>. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf&rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.</p>
+<h2 id="12-seamless-evolution">1.2 Seamless Evolution<a hidden class="anchor" aria-hidden="true" href="#12-seamless-evolution">#</a></h2>
+<p>The Apache community&rsquo;s &ldquo;<strong>don&rsquo;t break users</strong>&rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with <strong>tagged fields</strong> that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.</p>
+<h2 id="13-builtin-batching">1.3 Built‑in Batching<a hidden class="anchor" aria-hidden="true" href="#13-builtin-batching">#</a></h2>
+<p>For streaming workloads, sending <em>one‑message‑per‑request</em> is catastrophically inefficient. Instead, Kafka multiplexes multiple records over a single connection. This enables sequential disk writes and continuous TCP segments, dramatically reducing both <code>syscall</code> count and network jitter.</p>
+<hr>
+<h1 id="2anatomy-of"><strong>2  Anatomy of <code>ProduceRequest</code></strong><a hidden class="anchor" aria-hidden="true" href="#2anatomy-of">#</a></h1>
+<p>The <code>ProduceRequest</code> is structured in memory as a class that contains other classes as fields. When serialized, it converts all its fields into a binary format, which is illustrated in the image below. The in-memory representation and serialized version are nearly identical, with the addition of length fields that mark where each field ends. We will explain why the length fields matter shortly.</p>
+<p><img alt="image.png" loading="lazy" src="A%20Deep%20Dive%20into%20Kafka%E2%80%99s%20High%E2%80%91Performance%20Binary%20R%2020bf0ffdc3e980729d76ede55d6537a3/image.png"></p>
+<table>
+  <thead>
+      <tr>
+          <th>Level</th>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Meaning</th>
+          <th>Example</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>0</td>
+          <td><code>acks</code></td>
+          <td>INT16</td>
+          <td>Required replica acknowledgements</td>
+          <td><code>‑1</code> (all ISRs)</td>
+      </tr>
+      <tr>
+          <td>0</td>
+          <td><code>timeoutMs</code></td>
+          <td>INT32</td>
+          <td>Hard write timeout (ms)</td>
+          <td><code>30000</code></td>
+      </tr>
+      <tr>
+          <td>0</td>
+          <td><code>topicData.length</code></td>
+          <td>INT32</td>
+          <td>Number of <code>TopicProduceData</code></td>
+          <td><code>2</code></td>
+      </tr>
+      <tr>
+          <td>1</td>
+          <td><code>name</code></td>
+          <td>STRING</td>
+          <td>Topic name</td>
+          <td><code>&quot;orders&quot;</code></td>
+      </tr>
+      <tr>
+          <td>1</td>
+          <td><code>partitionData.length</code></td>
+          <td>INT32</td>
+          <td>Number of <code>PartitionProduceData</code></td>
+          <td><code>3</code></td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td><code>index</code></td>
+          <td>INT32</td>
+          <td>Partition index</td>
+          <td><code>0</code></td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td><code>recordSetSize</code></td>
+          <td>INT32</td>
+          <td>Size of the record set (bytes)</td>
+          <td><code>1024</code></td>
+      </tr>
+      <tr>
+          <td>2</td>
+          <td><code>recordSet</code></td>
+          <td>BYTES</td>
+          <td>Compressed batch of messages</td>
+          <td>…</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="21-why-length-fields-matter">2.1 Why Length Fields Matter<a hidden class="anchor" aria-hidden="true" href="#21-why-length-fields-matter">#</a></h2>
+<p>In OSI Layer 4, TCP guarantees <strong>byte‑stream ordering</strong> but not <em>message</em> boundaries. This means that without explicit size indicators, a receiver cannot determine where one logical request ends and another begins. As a result, every <strong>ARRAY / STRING / BYTES</strong> field in <code>ProduceRequest</code> follows a <em>length → payload</em> structure.</p>
+<blockquote>
+<p>📌 Rules of Thumb</p>
+<ul>
+<li>Size ≤ 255 → <code>UINT8</code> saves space</li>
+<li>256 ≤ size ≤ 65535 → <code>UINT16</code> (Java <code>short</code>)</li>
+<li>Larger → fall back to <code>UINT32</code></li>
+</ul></blockquote>
+<h1 id="3serialization"><strong>3  Serialization ( <code>write</code> )</strong><a hidden class="anchor" aria-hidden="true" href="#3serialization">#</a></h1>
+<p>The snippet below is auto‑generated by Kafka for <code>ProduceRequestData</code>; comments were added for clarity. Some variable names and logic are modified for better understanding and clarity.</p>
+<p>The <code>TopicProduceData</code> recursively calls the <code>write</code> function for all nested classes, such as <code>PartitionProduceData</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">write</span>(Writable out, ObjectCache cache, <span style="color:#66d9ef">short</span> ver) {
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/* —— Core scalars —— */</span>
+</span></span><span style="display:flex;"><span>    out.<span style="color:#a6e22e">writeShort</span>(acks);      <span style="color:#75715e">// (1) int16</span>
+</span></span><span style="display:flex;"><span>    out.<span style="color:#a6e22e">writeInt</span>(timeoutMs);   <span style="color:#75715e">// (2) int32</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/* —— TopicProduceData list —— */</span>
+</span></span><span style="display:flex;"><span>    out.<span style="color:#a6e22e">writeInt</span>(topicData.<span style="color:#a6e22e">size</span>());
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (TopicProduceData t : topicData) {
+</span></span><span style="display:flex;"><span>        t.<span style="color:#a6e22e">write</span>(out, cache, ver);   <span style="color:#75715e">// recursive serialization</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/* —— Tagged fields for forward‑compat —— */</span>
+</span></span><span style="display:flex;"><span>    RawTaggedFieldWriter rw <span style="color:#f92672">=</span> RawTaggedFieldWriter.<span style="color:#a6e22e">forFields</span>(unknownTags);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (ver <span style="color:#f92672">&gt;=</span> 9) {
+</span></span><span style="display:flex;"><span>        out.<span style="color:#a6e22e">writeUnsignedVarint</span>(rw.<span style="color:#a6e22e">numFields</span>());
+</span></span><span style="display:flex;"><span>        rw.<span style="color:#a6e22e">writeRawTags</span>(out, Integer.<span style="color:#a6e22e">MAX_VALUE</span>);
+</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> (rw.<span style="color:#a6e22e">numFields</span>() <span style="color:#f92672">&gt;</span> 0) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> UnsupportedVersionException(<span style="color:#e6db74">&#34;Tagged fields unsupported in &#34;</span> <span style="color:#f92672">+</span> ver);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="31-why-use-a-code-generator">3.1 Why Use a Code Generator?<a hidden class="anchor" aria-hidden="true" href="#31-why-use-a-code-generator">#</a></h2>
+<ol>
+<li><strong>Fat-finger Proof</strong> — Automatically validates ordering, sizes, and nullability through script checking.</li>
+<li><strong>Version Auto-Derivation</strong> — Simply update the JSON spec and run a Gradle task to generate new code branches in <code>write/read</code>.</li>
+<li><strong>Unified Caching</strong> — Uses <code>ObjectCache</code> to prevent redundant UTF-8 encoding across multiple fields.</li>
+</ol>
+<h1 id="4deserialization"><strong>4  Deserialization ( <code>read</code> )</strong><a hidden class="anchor" aria-hidden="true" href="#4deserialization">#</a></h1>
+<p><code>read</code> mirrors <code>write</code> but adds <strong>defensive checks</strong>:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#a6e22e">@Override</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">read</span>(Readable in, <span style="color:#66d9ef">short</span> ver) {
+</span></span><span style="display:flex;"><span>    acks      <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readShort</span>();
+</span></span><span style="display:flex;"><span>    timeoutMs <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readInt</span>();
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int</span> topicCnt <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readInt</span>();
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (topicCnt <span style="color:#f92672">&lt;</span> 0 <span style="color:#f92672">||</span> topicCnt <span style="color:#f92672">&gt;</span> in.<span style="color:#a6e22e">remaining</span>()) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> CorruptRecordException(<span style="color:#e6db74">&#34;Invalid topicCnt: &#34;</span> <span style="color:#f92672">+</span> topicCnt);
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    topicData <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> TopicProduceDataCollection(topicCnt);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0; i <span style="color:#f92672">&lt;</span> topicCnt; i<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>        topicData.<span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">new</span> TopicProduceData(in, ver));
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (ver <span style="color:#f92672">&gt;=</span> 9) {
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">int</span> tagCnt <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnsignedVarint</span>();
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0; i <span style="color:#f92672">&lt;</span> tagCnt; i<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">int</span> tagId <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnsignedVarint</span>();
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">int</span> size  <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnsignedVarint</span>();
+</span></span><span style="display:flex;"><span>            unknownTags <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnknownTaggedField</span>(unknownTags, tagId, size);
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><h2 id="41-three-rules-to-avoid-bugs">4.1 Three Rules to Avoid Bugs<a hidden class="anchor" aria-hidden="true" href="#41-three-rules-to-avoid-bugs">#</a></h2>
+<ol>
+<li><strong>Never over-read</strong> — throw an exception if <code>remaining()</code> is less than expected bytes.</li>
+<li><strong>Never over-allocate</strong> — prevent DoS attacks by rejecting unreasonably large sizes (over 1 million).</li>
+<li><strong>Gracefully skip tags</strong> — store unknown IDs in <code>unknownTags</code> to maintain forward compatibility.</li>
+</ol>
+<h1 id="5making-the-protocol-fast"><strong>5  Making the Protocol Fast <em>and</em> Safe</strong><a hidden class="anchor" aria-hidden="true" href="#5making-the-protocol-fast">#</a></h1>
+<h2 id="51-forwardbackward-compatibility-cheatsheet">5.1 Forward‑/Backward Compatibility Cheatsheet<a hidden class="anchor" aria-hidden="true" href="#51-forwardbackward-compatibility-cheatsheet">#</a></h2>
+<table>
+  <thead>
+      <tr>
+          <th>Scenario</th>
+          <th>Strategy</th>
+          <th>Benefit</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td>Add a field</td>
+          <td>Append to tail or use a tagged field</td>
+          <td>Old clients ignore it</td>
+      </tr>
+      <tr>
+          <td>Remove field</td>
+          <td>Mark<em>deprecated</em>, keep parser</td>
+          <td>Old data can still replay</td>
+      </tr>
+      <tr>
+          <td>Widen field</td>
+          <td>Dual‑write / dual‑read, then retire old</td>
+          <td>Online upgrades stay safe</td>
+      </tr>
+  </tbody>
+</table>
+<h2 id="52-zerocopy-in-practice">5.2 Zero‑Copy in Practice<a hidden class="anchor" aria-hidden="true" href="#52-zerocopy-in-practice">#</a></h2>
+<ul>
+<li><strong>Sender</strong> — <code>FileChannel.transferTo(socketFd)</code> → <code>sendfile(2)</code> → DMA → NIC.</li>
+<li><strong>Receiver</strong> — <code>epoll</code> (edge‑triggered) + <code>mmap</code> to persist sequentially, bypassing extra kernel copies.</li>
+</ul>
+<blockquote>
+<p>Note: True &ldquo;zero copy&rdquo; doesn&rsquo;t exist—we&rsquo;re referring to zero copies in user space.</p></blockquote>
+<h2 id="53-batch--compression--throughput-boost">5.3 Batch + Compression = Throughput Boost<a hidden class="anchor" aria-hidden="true" href="#53-batch--compression--throughput-boost">#</a></h2>
+<ul>
+<li>Send multiple messages in a single request</li>
+<li>Compress messages fields to reduce the size of the request</li>
+</ul>
+<h1 id="6-takeaways">6 Takeaways<a hidden class="anchor" aria-hidden="true" href="#6-takeaways">#</a></h1>
+<ul>
+<li>A custom binary RPC protocol consists of two mirrored operations: <strong>recursive write / recursive read</strong>.</li>
+<li>All fields with variable sizes <em>must</em> include a length prefix—this is essential for peers to determine message boundaries.</li>
+<li>Kafka achieves both <strong>flexibility</strong> and <strong>speed</strong> through its combination of tagged fields, zero-copy operations, and batch compression.</li>
+</ul>
+<blockquote>
+<p>Next Up — We&rsquo;ll trace sendfile operations, stay tuned!</p></blockquote>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://cyrilwongmy.github.io/">Mingyan&#39;s blog</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>

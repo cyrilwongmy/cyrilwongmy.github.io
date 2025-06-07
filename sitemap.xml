@@ -2,13 +2,16 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://cyrilwongmy.github.io/blog/</loc>
-    <lastmod>2025-06-01T00:02:56-07:00</lastmod>
+    <loc>https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/</loc>
+    <lastmod>2025-06-06T23:11:18-07:00</lastmod>
   </url><url>
-    <loc>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</loc>
-    <lastmod>2025-06-01T00:02:56-07:00</lastmod>
+    <loc>https://cyrilwongmy.github.io/blog/</loc>
+    <lastmod>2025-06-06T23:11:18-07:00</lastmod>
   </url><url>
     <loc>https://cyrilwongmy.github.io/</loc>
+    <lastmod>2025-06-06T23:11:18-07:00</lastmod>
+  </url><url>
+    <loc>https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/</loc>
     <lastmod>2025-06-01T00:02:56-07:00</lastmod>
   </url><url>
     <loc>https://cyrilwongmy.github.io/blog/01-kafka-01-tcp-fragmentation/</loc>
