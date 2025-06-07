@@ -163,8 +163,10 @@
     </h2>
   </header>
   <div class="entry-content">
-    <p>Why Did Kafka Re‑Invent RPC? 1.1 Performance HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf’s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.
-1.2 Seamless Evolution The Apache community’s “don’t break users” philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.
+    <p>This is part 3 of the Kafka series. In this part, we will briefly introduce the Kafka’s message protocol.
+The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
+https://github.com/cyrilwongmy/kafka-src-reading
+The reason that I write this blog in very simple way other than like the introduction to reactor blog is that I want to share the Kafka’s message protocol in a way that is easy to understand.
 ...</p>
   </div>
   <footer class="entry-footer"><span title='2025-06-06 23:11:18 -0700 PDT'>June 6, 2025</span></footer>

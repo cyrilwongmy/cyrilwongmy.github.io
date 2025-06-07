@@ -13,11 +13,10 @@
       <link>https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/</link>
       <pubDate>Fri, 06 Jun 2025 23:11:18 -0700</pubDate>
       <guid>https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/</guid>
-      <description>&lt;h1 id=&#34;why-did-kafka-reinvent-rpc&#34;&gt;Why Did Kafka Re‑Invent RPC?&lt;/h1&gt;
-&lt;h2 id=&#34;11-performance&#34;&gt;1.1 Performance&lt;/h2&gt;
-&lt;p&gt;HTTP 1.x and gRPC are convenient, but too heavyweight for a &lt;strong&gt;high‑throughput, low‑latency &lt;em&gt;durable&lt;/em&gt; log&lt;/strong&gt;. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf&amp;rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.&lt;/p&gt;
-&lt;h2 id=&#34;12-seamless-evolution&#34;&gt;1.2 Seamless Evolution&lt;/h2&gt;
-&lt;p&gt;The Apache community&amp;rsquo;s &amp;ldquo;&lt;strong&gt;don&amp;rsquo;t break users&lt;/strong&gt;&amp;rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with &lt;strong&gt;tagged fields&lt;/strong&gt; that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.&lt;/p&gt;</description>
+      <description>&lt;p&gt;This is part 3 of the Kafka series. In this part, we will briefly introduce the Kafka&amp;rsquo;s message protocol.&lt;/p&gt;
+&lt;p&gt;The source code referenced in this article uses Kafka&amp;rsquo;s trunk branch. I&amp;rsquo;ve pushed it to my personal repo for version alignment with this article:&lt;/p&gt;
+&lt;p&gt;&lt;a href=&#34;https://github.com/cyrilwongmy/kafka-src-reading&#34;&gt;https://github.com/cyrilwongmy/kafka-src-reading&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;The reason that I write this blog in very simple way other than like &lt;a href=&#34;https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/&#34;&gt;the introduction to reactor blog&lt;/a&gt; is that I want to share the Kafka&amp;rsquo;s message protocol in a way that is easy to understand.&lt;/p&gt;</description>
     </item>
     <item>
       <title>Kafka High-Throughput Architecture: Demystifying the Reactor Pattern (Part 2)</title>
