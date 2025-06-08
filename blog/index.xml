@@ -20,8 +20,7 @@
 &lt;/ul&gt;
 &lt;p&gt;The source code referenced in this article uses Kafka&amp;rsquo;s trunk branch. I&amp;rsquo;ve pushed it to my personal repo for version alignment with this article:&lt;/p&gt;
 &lt;p&gt;&lt;a href=&#34;https://github.com/cyrilwongmy/kafka-src-reading&#34;&gt;https://github.com/cyrilwongmy/kafka-src-reading&lt;/a&gt;&lt;/p&gt;
-&lt;p&gt;In this part, we will briefly introduce the Kafka&amp;rsquo;s message protocol.&lt;/p&gt;
-&lt;p&gt;The reason that I write this blog in very simple way other than like &lt;a href=&#34;https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/&#34;&gt;the introduction to reactor blog&lt;/a&gt; is that I want to share the Kafka&amp;rsquo;s message protocol in a way that is easy to understand.&lt;/p&gt;</description>
+&lt;p&gt;In this part, we will briefly introduce the Kafka&amp;rsquo;s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.&lt;/p&gt;</description>
     </item>
     <item>
       <title>Kafka High-Throughput Architecture: Demystifying the Reactor Pattern (Part 2)</title>

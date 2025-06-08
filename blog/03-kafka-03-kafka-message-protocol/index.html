@@ -14,8 +14,7 @@ Part 2: Introduction to Reactor Pattern and Kafka&rsquo;s Reactor Implementation
 
 The source code referenced in this article uses Kafka&rsquo;s trunk branch. I&rsquo;ve pushed it to my personal repo for version alignment with this article:
 https://github.com/cyrilwongmy/kafka-src-reading
-In this part, we will briefly introduce the Kafka&rsquo;s message protocol.
-The reason that I write this blog in very simple way other than like the introduction to reactor blog is that I want to share the Kafka&rsquo;s message protocol in a way that is easy to understand.">
+In this part, we will briefly introduce the Kafka&rsquo;s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.">
 <meta name="author" content="">
 <link rel="canonical" href="https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/">
 <link crossorigin="anonymous" href="/assets/css/stylesheet.f49d66caae9ea0fd43f21f29e71a8d3e284517ed770f2aa86fa012953ad3c9ef.css" integrity="sha256-9J1myq6eoP1D8h8p5xqNPihFF&#43;13Dyqob6ASlTrTye8=" rel="preload stylesheet" as="style">
@@ -69,8 +68,7 @@ The reason that I write this blog in very simple way other than like the introdu
   <meta property="og:description" content="This is part 3 of the Kafka series.
 Part 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka’s Reactor Implementation The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
 https://github.com/cyrilwongmy/kafka-src-reading
-In this part, we will briefly introduce the Kafka’s message protocol.
-The reason that I write this blog in very simple way other than like the introduction to reactor blog is that I want to share the Kafka’s message protocol in a way that is easy to understand.">
+In this part, we will briefly introduce the Kafka’s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.">
   <meta property="og:locale" content="en-us">
   <meta property="og:type" content="article">
     <meta property="article:section" content="blog">
@@ -85,8 +83,7 @@ Part 2: Introduction to Reactor Pattern and Kafka&rsquo;s Reactor Implementation
 
 The source code referenced in this article uses Kafka&rsquo;s trunk branch. I&rsquo;ve pushed it to my personal repo for version alignment with this article:
 https://github.com/cyrilwongmy/kafka-src-reading
-In this part, we will briefly introduce the Kafka&rsquo;s message protocol.
-The reason that I write this blog in very simple way other than like the introduction to reactor blog is that I want to share the Kafka&rsquo;s message protocol in a way that is easy to understand.">
+In this part, we will briefly introduce the Kafka&rsquo;s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.">
 
 
 <script type="application/ld+json">
@@ -115,12 +112,12 @@ The reason that I write this blog in very simple way other than like the introdu
   "@type": "BlogPosting",
   "headline": "An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)",
   "name": "An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)",
-  "description": "This is part 3 of the Kafka series.\nPart 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka\u0026rsquo;s Reactor Implementation The source code referenced in this article uses Kafka\u0026rsquo;s trunk branch. I\u0026rsquo;ve pushed it to my personal repo for version alignment with this article:\nhttps://github.com/cyrilwongmy/kafka-src-reading\nIn this part, we will briefly introduce the Kafka\u0026rsquo;s message protocol.\nThe reason that I write this blog in very simple way other than like the introduction to reactor blog is that I want to share the Kafka\u0026rsquo;s message protocol in a way that is easy to understand.\n",
+  "description": "This is part 3 of the Kafka series.\nPart 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka\u0026rsquo;s Reactor Implementation The source code referenced in this article uses Kafka\u0026rsquo;s trunk branch. I\u0026rsquo;ve pushed it to my personal repo for version alignment with this article:\nhttps://github.com/cyrilwongmy/kafka-src-reading\nIn this part, we will briefly introduce the Kafka\u0026rsquo;s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.\n",
   "keywords": [
     
   ],
-  "articleBody": "This is part 3 of the Kafka series.\nPart 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka’s Reactor Implementation The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:\nhttps://github.com/cyrilwongmy/kafka-src-reading\nIn this part, we will briefly introduce the Kafka’s message protocol.\nThe reason that I write this blog in very simple way other than like the introduction to reactor blog is that I want to share the Kafka’s message protocol in a way that is easy to understand.\nWhy Did Kafka Re‑Invent RPC? 1.1 Performance HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf’s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.\n1.2 Seamless Evolution The Apache community’s “don’t break users” philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.\n1.3 Built‑in Batching For streaming workloads, sending one‑message‑per‑request is catastrophically inefficient. Instead, Kafka multiplexes multiple records over a single connection. This enables sequential disk writes and continuous TCP segments, dramatically reducing both syscall count and network jitter.\n2 Anatomy of ProduceRequest The ProduceRequest is structured in memory as a class that contains other classes as fields. When serialized, it converts all its fields into a binary format, which is illustrated in the image below. The in-memory representation and serialized version are nearly identical, with the addition of length fields that mark where each field ends. We will explain why the length fields matter shortly.\nLevel Field Type Meaning Example 0 acks INT16 Required replica acknowledgements ‑1 (all ISRs) 0 timeoutMs INT32 Hard write timeout (ms) 30000 0 topicData.length INT32 Number of TopicProduceData 2 1 name STRING Topic name \"orders\" 1 partitionData.length INT32 Number of PartitionProduceData 3 2 index INT32 Partition index 0 2 recordSetSize INT32 Size of the record set (bytes) 1024 2 recordSet BYTES Compressed batch of messages … 2.1 Why Length Fields Matter In OSI Layer 4, TCP guarantees byte‑stream ordering but not message boundaries. This means that without explicit size indicators, a receiver cannot determine where one logical request ends and another begins. As a result, every ARRAY / STRING / BYTES field in ProduceRequest follows a length → payload structure.\n📌 Rules of Thumb\nSize ≤ 255 → UINT8 saves space 256 ≤ size ≤ 65535 → UINT16 (Java short) Larger → fall back to UINT32 3 Serialization ( write ) The snippet below is auto‑generated by Kafka for ProduceRequestData; comments were added for clarity. Some variable names and logic are modified for better understanding and clarity.\nThe TopicProduceData recursively calls the write function for all nested classes, such as PartitionProduceData.\n@Override public void write(Writable out, ObjectCache cache, short ver) { /* —— Core scalars —— */ out.writeShort(acks); // (1) int16 out.writeInt(timeoutMs); // (2) int32 /* —— TopicProduceData list —— */ out.writeInt(topicData.size()); for (TopicProduceData t : topicData) { t.write(out, cache, ver); // recursive serialization } /* —— Tagged fields for forward‑compat —— */ RawTaggedFieldWriter rw = RawTaggedFieldWriter.forFields(unknownTags); if (ver \u003e= 9) { out.writeUnsignedVarint(rw.numFields()); rw.writeRawTags(out, Integer.MAX_VALUE); } else if (rw.numFields() \u003e 0) { throw new UnsupportedVersionException(\"Tagged fields unsupported in \" + ver); } } 3.1 Why Use a Code Generator? Fat-finger Proof — Automatically validates ordering, sizes, and nullability through script checking. Version Auto-Derivation — Simply update the JSON spec and run a Gradle task to generate new code branches in write/read. Unified Caching — Uses ObjectCache to prevent redundant UTF-8 encoding across multiple fields. 4 Deserialization ( read ) read mirrors write but adds defensive checks:\n@Override public void read(Readable in, short ver) { acks = in.readShort(); timeoutMs = in.readInt(); int topicCnt = in.readInt(); if (topicCnt \u003c 0 || topicCnt \u003e in.remaining()) { throw new CorruptRecordException(\"Invalid topicCnt: \" + topicCnt); } topicData = new TopicProduceDataCollection(topicCnt); for (int i = 0; i \u003c topicCnt; i++) { topicData.add(new TopicProduceData(in, ver)); } if (ver \u003e= 9) { int tagCnt = in.readUnsignedVarint(); for (int i = 0; i \u003c tagCnt; i++) { int tagId = in.readUnsignedVarint(); int size = in.readUnsignedVarint(); unknownTags = in.readUnknownTaggedField(unknownTags, tagId, size); } } } 4.1 Three Rules to Avoid Bugs Never over-read — throw an exception if remaining() is less than expected bytes. Never over-allocate — prevent DoS attacks by rejecting unreasonably large sizes (over 1 million). Gracefully skip tags — store unknown IDs in unknownTags to maintain forward compatibility. 5 Making the Protocol Fast and Safe 5.1 Forward‑/Backward Compatibility Cheatsheet Scenario Strategy Benefit Add a field Append to tail or use a tagged field Old clients ignore it Remove field Markdeprecated, keep parser Old data can still replay Widen field Dual‑write / dual‑read, then retire old Online upgrades stay safe 5.2 Zero‑Copy in Practice Sender — FileChannel.transferTo(socketFd) → sendfile(2) → DMA → NIC. Receiver — epoll (edge‑triggered) + mmap to persist sequentially, bypassing extra kernel copies. Note: True “zero copy” doesn’t exist—we’re referring to zero copies in user space.\n5.3 Batch + Compression = Throughput Boost Send multiple messages in a single request Compress messages fields to reduce the size of the request 6 Takeaways A custom binary RPC protocol consists of two mirrored operations: recursive write / recursive read. All fields with variable sizes must include a length prefix—this is essential for peers to determine message boundaries. Kafka achieves both flexibility and speed through its combination of tagged fields, zero-copy operations, and batch compression. Next Up — We’ll trace sendfile operations, stay tuned!\nIf you have any question, free feel to leave issues at this repo.\n",
-  "wordCount" : "964",
+  "articleBody": "This is part 3 of the Kafka series.\nPart 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka’s Reactor Implementation The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:\nhttps://github.com/cyrilwongmy/kafka-src-reading\nIn this part, we will briefly introduce the Kafka’s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.\nIntroduction HTTP 1.x and gRPC are convenient, but too heavyweight for a high‑throughput, low‑latency durable log. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf’s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.\nThe Apache community’s “don’t break users” philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with tagged fields that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.\nSerialization and Deserialization Mechanisms At their core, all application-layer protocols—whether it’s RPC or HTTP—follow a similar idea: converting in-memory objects into binary form for network transmission. On the receiving end, the system reads this binary stream and reconstructs the original in-memory structures by parsing it piece by piece.\nKafka Protocol Request Structure All request types in Kafka are located under the org.apache.kafka.common.requests package. Let’s use ProduceRequest as an example to walk through its protocol implementation.\nAnatomy of ProduceRequest To understand the protocol, we’ll look at a simplified version for clarity. As shown in the diagram, the network representation of a ProduceRequest is a deeply nested object structure—much like the layered model in computer networking.\nLevel Field Type Meaning Example 0 acks INT16 Required replica acknowledgements ‑1 (all ISRs) 0 timeoutMs INT32 Hard write timeout (ms) 30000 0 topicData.length INT32 Number of TopicProduceData 2 1 name STRING Topic name \"orders\" 1 partitionData.length INT32 Number of PartitionProduceData 3 2 index INT32 Partition index 0 2 recordSetSize INT32 Size of the record set (bytes) 1024 2 recordSet BYTES Compressed batch of messages … The outermost object is ProduceRequestData, which contains configuration info and the number of topic entries. Why record the number of topics? Because the receiver must know how many TopicProduceData entries to expect—otherwise, it can’t determine message boundaries. For unknown-length sequences, you must explicitly record the size, typically using 2 or 4 bytes. The receiver reads those bytes and converts them into int or short to know how many elements to parse next. A single ProduceRequest can target multiple topics, each represented by a TopicProduceData object. Each TopicProduceData includes: the byte length and content of the topic name, the number of partitions, and a list of PartitionProduceData. Each PartitionProduceData records:\nthe partition index, the length of the record batch, and the actual set of messages. Kafka’s Serialization Implementation Kafka uses code generation to implement serialization and deserialization. This helps avoid typos and ensures compatibility across protocol versions. A global ObjectSerializationCache is used to cache UTF-8 encoded strings and avoid recomputation.\nWhen serializing a ProduceRequest, Kafka calls the write method from ProduceRequestData, which implements the Message interface. This method serializes the in-memory object into a Writable—usually a wrapper around Java NIO’s ByteBuffer, like ByteBufferAccessor.\nThe write method contains many version checks to ensure forward/backward compatibility, which is critical when designing a robust protocol.\nKey fields written during serialization: acks: how many replicas must confirm the write. timeoutMs: how long the broker should wait for replicas to acknowledge. topicData.size(): number of topics in the list (not byte length). Each topic’s data is serialized via its own write method. Why Length Fields Matter? In OSI Layer 4, TCP guarantees byte‑stream ordering but not message boundaries. This means that without explicit size indicators, a receiver cannot determine where one logical request ends and another begins. As a result, every ARRAY / STRING / BYTES field in ProduceRequest follows a length → payload structure.\nHere’s a simplified version of the write method from TopicProduceData:\npublic void write(Writable writable, ObjectSerializationCache cache, short version) { byte[] stringBytes = cache.getSerializedValue(name); if (version \u003e= 9) { writable.writeUnsignedVarint(stringBytes.length + 1); } else { writable.writeShort((short) stringBytes.length); } writable.writeByteArray(stringBytes); if (version \u003e= 9) { writable.writeUnsignedVarint(partitionData.size() + 1); } else { writable.writeInt(partitionData.size()); } for (PartitionProduceData p : partitionData) { p.write(writable, cache, version); } } This recursive structure ensures that all nested fields are serialized correctly. Ultimately, all data ends up in a ByteBuffer, which Kafka sends over the network.\nOptimization: Zero-Copy For high-performance messaging, Kafka avoids loading entire files into memory before sending. It uses zero-copy techniques to minimize unnecessary memory copies.\nThe usual data flow from disk to network is:\nDisk -\u003e Kernel Space -\u003e User Space -\u003e Socket Buffer -\u003e Network\nKafka uses zero-copy to avoid the memory copy from the kernel space to the user space:\nDisk -\u003e Kernel Space -\u003e Network\nWe’ll dive deeper into this in a future blog about Kafka’s zero-copy optimizations.\nKafka’s Deserialization Implementation Deserialization is handled by the read method in the Message interface, which reads from a Readable (usually a buffer).\nHere’s how ProduceRequestData.read() works:\nRead 2 bytes → convert to short for acks Read 4 bytes → convert to int for timeoutMs Read 4 bytes → get number of TopicProduceData entries For each topic, invoke its read method to deserialize nested structures Example:\npublic void read(Readable readable, short version) { this.acks = readable.readShort(); this.timeoutMs = readable.readInt(); int arrayLength = readable.readInt(); TopicProduceDataCollection collection = new TopicProduceDataCollection(arrayLength); for (int i = 0; i \u003c arrayLength; i++) { collection.add(new TopicProduceData(readable, version)); } this.topicData = collection; } This is essentially the reverse of the write method.\nTakeway about forward/backward compatibility Scenario Strategy Benefit Add a field Append to tail or use a tagged field Old clients ignore it Remove field Markdeprecated, keep parser Old data can still replay Widen field Dual‑write / dual‑read, then retire old Online upgrades stay safe Conclusion Implementing a simple RPC-like protocol is quite approachable. From Kafka’s design, we learn how to use recursive serialization/deserialization effectively.\nFor further optimization, consider:\nCompressing data to reduce transmission size, Reducing memory copies when transmitting from disk or in-memory buffers to the network (e.g., using zero-copy). These principles form a solid foundation for building efficient and maintainable binary protocols.\nIf you have any question, free feel to leave issues at this repo.\n",
+  "wordCount" : "1068",
   "inLanguage": "en",
   "datePublished": "2025-06-06T23:11:18-07:00",
   "dateModified": "2025-06-06T23:11:18-07:00",
@@ -202,18 +199,16 @@ The reason that I write this blog in very simple way other than like the introdu
 </ul>
 <p>The source code referenced in this article uses Kafka&rsquo;s trunk branch. I&rsquo;ve pushed it to my personal repo for version alignment with this article:</p>
 <p><a href="https://github.com/cyrilwongmy/kafka-src-reading">https://github.com/cyrilwongmy/kafka-src-reading</a></p>
-<p>In this part, we will briefly introduce the Kafka&rsquo;s message protocol.</p>
-<p>The reason that I write this blog in very simple way other than like <a href="https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/">the introduction to reactor blog</a> is that I want to share the Kafka&rsquo;s message protocol in a way that is easy to understand.</p>
-<h1 id="why-did-kafka-reinvent-rpc">Why Did Kafka Re‑Invent RPC?<a hidden class="anchor" aria-hidden="true" href="#why-did-kafka-reinvent-rpc">#</a></h1>
-<h2 id="11-performance">1.1 Performance<a hidden class="anchor" aria-hidden="true" href="#11-performance">#</a></h2>
+<p>In this part, we will briefly introduce the Kafka&rsquo;s message protocol. Kafka’s server and client communicate through a custom message protocol. By understanding how Kafka’s RPC protocol is implemented, we can apply similar principles when designing our own protocols.</p>
+<h1 id="introduction">Introduction<a hidden class="anchor" aria-hidden="true" href="#introduction">#</a></h1>
 <p>HTTP 1.x and gRPC are convenient, but too heavyweight for a <strong>high‑throughput, low‑latency <em>durable</em> log</strong>. Each HTTP header on a TCP frame adds unnecessary bytes to every message. Even Protobuf&rsquo;s var‑int encoding becomes a bottleneck when allocating thousands of objects per millisecond, putting strain on heap memory and garbage collection.</p>
-<h2 id="12-seamless-evolution">1.2 Seamless Evolution<a hidden class="anchor" aria-hidden="true" href="#12-seamless-evolution">#</a></h2>
 <p>The Apache community&rsquo;s &ldquo;<strong>don&rsquo;t break users</strong>&rdquo; philosophy requires brokers and clients to communicate across major versions. Their solution: a custom protocol with <strong>tagged fields</strong> that allows new data to be appended to message ends. Like HTTP/2 frames, older clients can safely ignore unknown tags.</p>
-<h2 id="13-builtin-batching">1.3 Built‑in Batching<a hidden class="anchor" aria-hidden="true" href="#13-builtin-batching">#</a></h2>
-<p>For streaming workloads, sending <em>one‑message‑per‑request</em> is catastrophically inefficient. Instead, Kafka multiplexes multiple records over a single connection. This enables sequential disk writes and continuous TCP segments, dramatically reducing both <code>syscall</code> count and network jitter.</p>
-<hr>
-<h1 id="2anatomy-of"><strong>2  Anatomy of <code>ProduceRequest</code></strong><a hidden class="anchor" aria-hidden="true" href="#2anatomy-of">#</a></h1>
-<p>The <code>ProduceRequest</code> is structured in memory as a class that contains other classes as fields. When serialized, it converts all its fields into a binary format, which is illustrated in the image below. The in-memory representation and serialized version are nearly identical, with the addition of length fields that mark where each field ends. We will explain why the length fields matter shortly.</p>
+<h2 id="serialization-and-deserialization-mechanisms"><strong>Serialization and Deserialization Mechanisms</strong><a hidden class="anchor" aria-hidden="true" href="#serialization-and-deserialization-mechanisms">#</a></h2>
+<p>At their core, all application-layer protocols—whether it’s RPC or HTTP—follow a similar idea: converting in-memory objects into binary form for network transmission. On the receiving end, the system reads this binary stream and reconstructs the original in-memory structures by parsing it piece by piece.</p>
+<h1 id="kafka-protocol-request-structure"><strong>Kafka Protocol Request Structure</strong><a hidden class="anchor" aria-hidden="true" href="#kafka-protocol-request-structure">#</a></h1>
+<p>All request types in Kafka are located under the <code>org.apache.kafka.common.requests</code> package. Let’s use <code>ProduceRequest</code> as an example to walk through its protocol implementation.</p>
+<h2 id="anatomy-of-producerequest">Anatomy of <code>ProduceRequest</code><a hidden class="anchor" aria-hidden="true" href="#anatomy-of-producerequest">#</a></h2>
+<p>To understand the protocol, we’ll look at a simplified version for clarity. As shown in the diagram, the network representation of a ProduceRequest is a deeply nested object structure—much like the layered model in computer networking.</p>
 <p><img alt="image.png" loading="lazy" src="https://raw.githubusercontent.com/cyrilwongmy/cyrilwongmy.github.io/refs/heads/main/assets/image/message-protocol-image.png"></p>
 <table>
   <thead>
@@ -284,79 +279,85 @@ The reason that I write this blog in very simple way other than like the introdu
       </tr>
   </tbody>
 </table>
-<h2 id="21-why-length-fields-matter">2.1 Why Length Fields Matter<a hidden class="anchor" aria-hidden="true" href="#21-why-length-fields-matter">#</a></h2>
-<p>In OSI Layer 4, TCP guarantees <strong>byte‑stream ordering</strong> but not <em>message</em> boundaries. This means that without explicit size indicators, a receiver cannot determine where one logical request ends and another begins. As a result, every <strong>ARRAY / STRING / BYTES</strong> field in <code>ProduceRequest</code> follows a <em>length → payload</em> structure.</p>
-<blockquote>
-<p>📌 Rules of Thumb</p>
 <ul>
-<li>Size ≤ 255 → <code>UINT8</code> saves space</li>
-<li>256 ≤ size ≤ 65535 → <code>UINT16</code> (Java <code>short</code>)</li>
-<li>Larger → fall back to <code>UINT32</code></li>
-</ul></blockquote>
-<h1 id="3serialization"><strong>3  Serialization ( <code>write</code> )</strong><a hidden class="anchor" aria-hidden="true" href="#3serialization">#</a></h1>
-<p>The snippet below is auto‑generated by Kafka for <code>ProduceRequestData</code>; comments were added for clarity. Some variable names and logic are modified for better understanding and clarity.</p>
-<p>The <code>TopicProduceData</code> recursively calls the <code>write</code> function for all nested classes, such as <code>PartitionProduceData</code>.</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#a6e22e">@Override</span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">write</span>(Writable out, ObjectCache cache, <span style="color:#66d9ef">short</span> ver) {
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/* —— Core scalars —— */</span>
-</span></span><span style="display:flex;"><span>    out.<span style="color:#a6e22e">writeShort</span>(acks);      <span style="color:#75715e">// (1) int16</span>
-</span></span><span style="display:flex;"><span>    out.<span style="color:#a6e22e">writeInt</span>(timeoutMs);   <span style="color:#75715e">// (2) int32</span>
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/* —— TopicProduceData list —— */</span>
-</span></span><span style="display:flex;"><span>    out.<span style="color:#a6e22e">writeInt</span>(topicData.<span style="color:#a6e22e">size</span>());
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (TopicProduceData t : topicData) {
-</span></span><span style="display:flex;"><span>        t.<span style="color:#a6e22e">write</span>(out, cache, ver);   <span style="color:#75715e">// recursive serialization</span>
+<li>The outermost object is ProduceRequestData, which contains configuration info and the number of topic entries.</li>
+<li>Why record the number of topics? Because the receiver must know how many TopicProduceData entries to expect—otherwise, it can’t determine message boundaries. For unknown-length sequences, you must explicitly record the size, typically using 2 or 4 bytes. The receiver reads those bytes and converts them into int or short to know how many elements to parse next.</li>
+<li>A single ProduceRequest can target multiple topics, each represented by a TopicProduceData object.</li>
+<li>Each TopicProduceData includes:
+<ul>
+<li>the byte length and content of the topic name,</li>
+<li>the number of partitions,</li>
+<li>and a list of PartitionProduceData.</li>
+</ul>
+</li>
+</ul>
+<p>Each PartitionProduceData records:</p>
+<ul>
+<li>the partition index,</li>
+<li>the length of the record batch,</li>
+<li>and the actual set of messages.</li>
+</ul>
+<h2 id="kafkas-serialization-implementation"><strong>Kafka’s Serialization Implementation</strong><a hidden class="anchor" aria-hidden="true" href="#kafkas-serialization-implementation">#</a></h2>
+<p>Kafka uses <strong>code generation</strong> to implement serialization and deserialization. This helps avoid typos and ensures compatibility across protocol versions. A global ObjectSerializationCache is used to cache UTF-8 encoded strings and avoid recomputation.</p>
+<p>When serializing a ProduceRequest, Kafka calls the write method from ProduceRequestData, which implements the Message interface. This method serializes the in-memory object into a Writable—usually a wrapper around Java NIO’s ByteBuffer, like ByteBufferAccessor.</p>
+<p>The write method contains many version checks to ensure forward/backward compatibility, which is critical when designing a robust protocol.</p>
+<h2 id="key-fields-written-during-serialization"><strong>Key fields written during serialization:</strong><a hidden class="anchor" aria-hidden="true" href="#key-fields-written-during-serialization">#</a></h2>
+<ul>
+<li>acks: how many replicas must confirm the write.</li>
+<li>timeoutMs: how long the broker should wait for replicas to acknowledge.</li>
+<li>topicData.size(): number of topics in the list (not byte length).</li>
+<li>Each topic’s data is serialized via its own write method.</li>
+</ul>
+<p>Why Length Fields Matter? In OSI Layer 4, TCP guarantees <strong>byte‑stream ordering</strong> but not <em>message</em> boundaries. This means that without explicit size indicators, a receiver cannot determine where one logical request ends and another begins. As a result, every <strong>ARRAY / STRING / BYTES</strong> field in <code>ProduceRequest</code> follows a <em>length → payload</em> structure.</p>
+<p>Here’s a simplified version of the write method from TopicProduceData:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">write</span>(Writable writable, ObjectSerializationCache cache, <span style="color:#66d9ef">short</span> version) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">byte</span><span style="color:#f92672">[]</span> stringBytes <span style="color:#f92672">=</span> cache.<span style="color:#a6e22e">getSerializedValue</span>(name);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (version <span style="color:#f92672">&gt;=</span> 9) {
+</span></span><span style="display:flex;"><span>        writable.<span style="color:#a6e22e">writeUnsignedVarint</span>(stringBytes.<span style="color:#a6e22e">length</span> <span style="color:#f92672">+</span> 1);
+</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">else</span> {
+</span></span><span style="display:flex;"><span>        writable.<span style="color:#a6e22e">writeShort</span>((<span style="color:#66d9ef">short</span>) stringBytes.<span style="color:#a6e22e">length</span>);
 </span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    writable.<span style="color:#a6e22e">writeByteArray</span>(stringBytes);
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e">/* —— Tagged fields for forward‑compat —— */</span>
-</span></span><span style="display:flex;"><span>    RawTaggedFieldWriter rw <span style="color:#f92672">=</span> RawTaggedFieldWriter.<span style="color:#a6e22e">forFields</span>(unknownTags);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (ver <span style="color:#f92672">&gt;=</span> 9) {
-</span></span><span style="display:flex;"><span>        out.<span style="color:#a6e22e">writeUnsignedVarint</span>(rw.<span style="color:#a6e22e">numFields</span>());
-</span></span><span style="display:flex;"><span>        rw.<span style="color:#a6e22e">writeRawTags</span>(out, Integer.<span style="color:#a6e22e">MAX_VALUE</span>);
-</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">else</span> <span style="color:#66d9ef">if</span> (rw.<span style="color:#a6e22e">numFields</span>() <span style="color:#f92672">&gt;</span> 0) {
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> UnsupportedVersionException(<span style="color:#e6db74">&#34;Tagged fields unsupported in &#34;</span> <span style="color:#f92672">+</span> ver);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (version <span style="color:#f92672">&gt;=</span> 9) {
+</span></span><span style="display:flex;"><span>        writable.<span style="color:#a6e22e">writeUnsignedVarint</span>(partitionData.<span style="color:#a6e22e">size</span>() <span style="color:#f92672">+</span> 1);
+</span></span><span style="display:flex;"><span>    } <span style="color:#66d9ef">else</span> {
+</span></span><span style="display:flex;"><span>        writable.<span style="color:#a6e22e">writeInt</span>(partitionData.<span style="color:#a6e22e">size</span>());
 </span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><h2 id="31-why-use-a-code-generator">3.1 Why Use a Code Generator?<a hidden class="anchor" aria-hidden="true" href="#31-why-use-a-code-generator">#</a></h2>
-<ol>
-<li><strong>Fat-finger Proof</strong> — Automatically validates ordering, sizes, and nullability through script checking.</li>
-<li><strong>Version Auto-Derivation</strong> — Simply update the JSON spec and run a Gradle task to generate new code branches in <code>write/read</code>.</li>
-<li><strong>Unified Caching</strong> — Uses <code>ObjectCache</code> to prevent redundant UTF-8 encoding across multiple fields.</li>
-</ol>
-<h1 id="4deserialization"><strong>4  Deserialization ( <code>read</code> )</strong><a hidden class="anchor" aria-hidden="true" href="#4deserialization">#</a></h1>
-<p><code>read</code> mirrors <code>write</code> but adds <strong>defensive checks</strong>:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#a6e22e">@Override</span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">read</span>(Readable in, <span style="color:#66d9ef">short</span> ver) {
-</span></span><span style="display:flex;"><span>    acks      <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readShort</span>();
-</span></span><span style="display:flex;"><span>    timeoutMs <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readInt</span>();
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int</span> topicCnt <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readInt</span>();
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (topicCnt <span style="color:#f92672">&lt;</span> 0 <span style="color:#f92672">||</span> topicCnt <span style="color:#f92672">&gt;</span> in.<span style="color:#a6e22e">remaining</span>()) {
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">throw</span> <span style="color:#66d9ef">new</span> CorruptRecordException(<span style="color:#e6db74">&#34;Invalid topicCnt: &#34;</span> <span style="color:#f92672">+</span> topicCnt);
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    topicData <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> TopicProduceDataCollection(topicCnt);
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0; i <span style="color:#f92672">&lt;</span> topicCnt; i<span style="color:#f92672">++</span>) {
-</span></span><span style="display:flex;"><span>        topicData.<span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">new</span> TopicProduceData(in, ver));
-</span></span><span style="display:flex;"><span>    }
-</span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> (ver <span style="color:#f92672">&gt;=</span> 9) {
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">int</span> tagCnt <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnsignedVarint</span>();
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0; i <span style="color:#f92672">&lt;</span> tagCnt; i<span style="color:#f92672">++</span>) {
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">int</span> tagId <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnsignedVarint</span>();
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">int</span> size  <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnsignedVarint</span>();
-</span></span><span style="display:flex;"><span>            unknownTags <span style="color:#f92672">=</span> in.<span style="color:#a6e22e">readUnknownTaggedField</span>(unknownTags, tagId, size);
-</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (PartitionProduceData p : partitionData) {
+</span></span><span style="display:flex;"><span>        p.<span style="color:#a6e22e">write</span>(writable, cache, version);
 </span></span><span style="display:flex;"><span>    }
 </span></span><span style="display:flex;"><span>}
-</span></span></code></pre></div><h2 id="41-three-rules-to-avoid-bugs">4.1 Three Rules to Avoid Bugs<a hidden class="anchor" aria-hidden="true" href="#41-three-rules-to-avoid-bugs">#</a></h2>
-<ol>
-<li><strong>Never over-read</strong> — throw an exception if <code>remaining()</code> is less than expected bytes.</li>
-<li><strong>Never over-allocate</strong> — prevent DoS attacks by rejecting unreasonably large sizes (over 1 million).</li>
-<li><strong>Gracefully skip tags</strong> — store unknown IDs in <code>unknownTags</code> to maintain forward compatibility.</li>
-</ol>
-<h1 id="5making-the-protocol-fast"><strong>5  Making the Protocol Fast <em>and</em> Safe</strong><a hidden class="anchor" aria-hidden="true" href="#5making-the-protocol-fast">#</a></h1>
-<h2 id="51-forwardbackward-compatibility-cheatsheet">5.1 Forward‑/Backward Compatibility Cheatsheet<a hidden class="anchor" aria-hidden="true" href="#51-forwardbackward-compatibility-cheatsheet">#</a></h2>
+</span></span></code></pre></div><p>This recursive structure ensures that all nested fields are serialized correctly. Ultimately, all data ends up in a ByteBuffer, which Kafka sends over the network.</p>
+<h2 id="optimization-zero-copy"><strong>Optimization: Zero-Copy</strong><a hidden class="anchor" aria-hidden="true" href="#optimization-zero-copy">#</a></h2>
+<p>For high-performance messaging, Kafka avoids loading entire files into memory before sending. It uses <strong>zero-copy</strong> techniques to minimize unnecessary memory copies.</p>
+<p>The usual data flow from disk to network is:</p>
+<p>Disk -&gt; Kernel Space -&gt; User Space -&gt; Socket Buffer -&gt; Network</p>
+<p>Kafka uses zero-copy to avoid the memory copy from the kernel space to the user space:</p>
+<p>Disk -&gt; Kernel Space -&gt; Network</p>
+<p>We’ll dive deeper into this in a future blog about Kafka’s zero-copy optimizations.</p>
+<h2 id="kafkas-deserialization-implementation"><strong>Kafka’s Deserialization Implementation</strong><a hidden class="anchor" aria-hidden="true" href="#kafkas-deserialization-implementation">#</a></h2>
+<p>Deserialization is handled by the read method in the Message interface, which reads from a Readable (usually a buffer).</p>
+<p>Here’s how ProduceRequestData.read() works:</p>
+<ul>
+<li>Read 2 bytes → convert to short for acks</li>
+<li>Read 4 bytes → convert to int for timeoutMs</li>
+<li>Read 4 bytes → get number of TopicProduceData entries</li>
+<li>For each topic, invoke its read method to deserialize nested structures</li>
+</ul>
+<p>Example:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span> <span style="color:#66d9ef">public</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">read</span>(Readable readable, <span style="color:#66d9ef">short</span> version) {
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">acks</span> <span style="color:#f92672">=</span> readable.<span style="color:#a6e22e">readShort</span>();
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">timeoutMs</span> <span style="color:#f92672">=</span> readable.<span style="color:#a6e22e">readInt</span>();
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">int</span> arrayLength <span style="color:#f92672">=</span> readable.<span style="color:#a6e22e">readInt</span>();
+</span></span><span style="display:flex;"><span>    TopicProduceDataCollection collection <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> TopicProduceDataCollection(arrayLength);
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">int</span> i <span style="color:#f92672">=</span> 0; i <span style="color:#f92672">&lt;</span> arrayLength; i<span style="color:#f92672">++</span>) {
+</span></span><span style="display:flex;"><span>        collection.<span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">new</span> TopicProduceData(readable, version));
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">topicData</span> <span style="color:#f92672">=</span> collection;
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>This is essentially the reverse of the write method.</p>
+<h2 id="takeway-about-forwardbackward-compatibility">Takeway about forward/backward compatibility<a hidden class="anchor" aria-hidden="true" href="#takeway-about-forwardbackward-compatibility">#</a></h2>
 <table>
   <thead>
       <tr>
@@ -383,26 +384,14 @@ The reason that I write this blog in very simple way other than like the introdu
       </tr>
   </tbody>
 </table>
-<h2 id="52-zerocopy-in-practice">5.2 Zero‑Copy in Practice<a hidden class="anchor" aria-hidden="true" href="#52-zerocopy-in-practice">#</a></h2>
+<h1 id="conclusion"><strong>Conclusion</strong><a hidden class="anchor" aria-hidden="true" href="#conclusion">#</a></h1>
+<p>Implementing a simple RPC-like protocol is quite approachable. From Kafka’s design, we learn how to use <strong>recursive serialization/deserialization</strong> effectively.</p>
+<p>For further optimization, consider:</p>
 <ul>
-<li><strong>Sender</strong> — <code>FileChannel.transferTo(socketFd)</code> → <code>sendfile(2)</code> → DMA → NIC.</li>
-<li><strong>Receiver</strong> — <code>epoll</code> (edge‑triggered) + <code>mmap</code> to persist sequentially, bypassing extra kernel copies.</li>
+<li>Compressing data to reduce transmission size,</li>
+<li>Reducing memory copies when transmitting from disk or in-memory buffers to the network (e.g., using zero-copy).</li>
 </ul>
-<blockquote>
-<p>Note: True &ldquo;zero copy&rdquo; doesn&rsquo;t exist—we&rsquo;re referring to zero copies in user space.</p></blockquote>
-<h2 id="53-batch--compression--throughput-boost">5.3 Batch + Compression = Throughput Boost<a hidden class="anchor" aria-hidden="true" href="#53-batch--compression--throughput-boost">#</a></h2>
-<ul>
-<li>Send multiple messages in a single request</li>
-<li>Compress messages fields to reduce the size of the request</li>
-</ul>
-<h1 id="6-takeaways">6 Takeaways<a hidden class="anchor" aria-hidden="true" href="#6-takeaways">#</a></h1>
-<ul>
-<li>A custom binary RPC protocol consists of two mirrored operations: <strong>recursive write / recursive read</strong>.</li>
-<li>All fields with variable sizes <em>must</em> include a length prefix—this is essential for peers to determine message boundaries.</li>
-<li>Kafka achieves both <strong>flexibility</strong> and <strong>speed</strong> through its combination of tagged fields, zero-copy operations, and batch compression.</li>
-</ul>
-<blockquote>
-<p>Next Up — We&rsquo;ll trace sendfile operations, stay tuned!</p></blockquote>
+<p>These principles form a solid foundation for building efficient and maintainable binary protocols.</p>
 <p>If you have any question, free feel to leave issues at this <a href="https://github.com/cyrilwongmy/kafka-src-reading">repo</a>.</p>
 
 
