@@ -134,6 +134,22 @@
 
 <article class="post-entry"> 
   <header class="entry-header">
+    <h2 class="entry-hint-parent">Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)
+    </h2>
+  </header>
+  <div class="entry-content">
+    <p>This is part 4 of the Kafka series.
+Part 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka’s Reactor Implementation Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3) The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
+https://github.com/cyrilwongmy/kafka-src-reading
+In the previous article, we explored the path of a Kafka request from the network layer to the KafkaApis class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a Fetch request, constructs the response, and sends log data using zero-copy techniques.
+...</p>
+  </div>
+  <footer class="entry-footer"><span title='2025-06-09 23:24:52 -0700 PDT'>June 9, 2025</span></footer>
+  <a class="entry-link" aria-label="post link to Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)" href="https://cyrilwongmy.github.io/blog/04-kafka-fetch-request-and-zero-copy/"></a>
+</article>
+
+<article class="post-entry"> 
+  <header class="entry-header">
     <h2 class="entry-hint-parent">An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)
     </h2>
   </header>

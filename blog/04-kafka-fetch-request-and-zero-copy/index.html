@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en" dir="auto">
+
+<head><meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="robots" content="index, follow">
+<title>Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4) | Mingyan&#39;s blog</title>
+<meta name="keywords" content="">
+<meta name="description" content="This is part 4 of the Kafka series.
+
+Part 1: Introduction to Kafka TCP Fragmentation
+Part 2: Introduction to Reactor Pattern and Kafka&rsquo;s Reactor Implementation
+Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)
+
+The source code referenced in this article uses Kafka&rsquo;s trunk branch. I&rsquo;ve pushed it to my personal repo for version alignment with this article:
+https://github.com/cyrilwongmy/kafka-src-reading
+In the previous article, we explored the path of a Kafka request from the network layer to the KafkaApis class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a Fetch request, constructs the response, and sends log data using zero-copy techniques.">
+<meta name="author" content="">
+<link rel="canonical" href="https://cyrilwongmy.github.io/blog/04-kafka-fetch-request-and-zero-copy/">
+<link crossorigin="anonymous" href="/assets/css/stylesheet.f49d66caae9ea0fd43f21f29e71a8d3e284517ed770f2aa86fa012953ad3c9ef.css" integrity="sha256-9J1myq6eoP1D8h8p5xqNPihFF&#43;13Dyqob6ASlTrTye8=" rel="preload stylesheet" as="style">
+<link rel="icon" href="https://cyrilwongmy.github.io/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="https://cyrilwongmy.github.io/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://cyrilwongmy.github.io/favicon-32x32.png">
+<link rel="apple-touch-icon" href="https://cyrilwongmy.github.io/apple-touch-icon.png">
+<link rel="mask-icon" href="https://cyrilwongmy.github.io/safari-pinned-tab.svg">
+<meta name="theme-color" content="#2e2e33">
+<meta name="msapplication-TileColor" content="#2e2e33">
+<link rel="alternate" hreflang="en" href="https://cyrilwongmy.github.io/blog/04-kafka-fetch-request-and-zero-copy/">
+<noscript>
+    <style>
+        #theme-toggle,
+        .top-link {
+            display: none;
+        }
+
+    </style>
+    <style>
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --theme: rgb(29, 30, 32);
+                --entry: rgb(46, 46, 51);
+                --primary: rgb(218, 218, 219);
+                --secondary: rgb(155, 156, 157);
+                --tertiary: rgb(65, 66, 68);
+                --content: rgb(196, 196, 197);
+                --code-block-bg: rgb(46, 46, 51);
+                --code-bg: rgb(55, 56, 62);
+                --border: rgb(51, 51, 51);
+            }
+
+            .list {
+                background: var(--theme);
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-track {
+                background: 0 0;
+            }
+
+            .list:not(.dark)::-webkit-scrollbar-thumb {
+                border-color: var(--theme);
+            }
+        }
+
+    </style>
+</noscript><meta property="og:url" content="https://cyrilwongmy.github.io/blog/04-kafka-fetch-request-and-zero-copy/">
+  <meta property="og:site_name" content="Mingyan&#39;s blog">
+  <meta property="og:title" content="Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)">
+  <meta property="og:description" content="This is part 4 of the Kafka series.
+Part 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka’s Reactor Implementation Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3) The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:
+https://github.com/cyrilwongmy/kafka-src-reading
+In the previous article, we explored the path of a Kafka request from the network layer to the KafkaApis class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a Fetch request, constructs the response, and sends log data using zero-copy techniques.">
+  <meta property="og:locale" content="en-us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="blog">
+    <meta property="article:published_time" content="2025-06-09T23:24:52-07:00">
+    <meta property="article:modified_time" content="2025-06-09T23:24:52-07:00">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)">
+<meta name="twitter:description" content="This is part 4 of the Kafka series.
+
+Part 1: Introduction to Kafka TCP Fragmentation
+Part 2: Introduction to Reactor Pattern and Kafka&rsquo;s Reactor Implementation
+Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)
+
+The source code referenced in this article uses Kafka&rsquo;s trunk branch. I&rsquo;ve pushed it to my personal repo for version alignment with this article:
+https://github.com/cyrilwongmy/kafka-src-reading
+In the previous article, we explored the path of a Kafka request from the network layer to the KafkaApis class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a Fetch request, constructs the response, and sends log data using zero-copy techniques.">
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position":  1 ,
+      "name": "Blogs",
+      "item": "https://cyrilwongmy.github.io/blog/"
+    }, 
+    {
+      "@type": "ListItem",
+      "position":  2 ,
+      "name": "Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)",
+      "item": "https://cyrilwongmy.github.io/blog/04-kafka-fetch-request-and-zero-copy/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)",
+  "name": "Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)",
+  "description": "This is part 4 of the Kafka series.\nPart 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka\u0026rsquo;s Reactor Implementation Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3) The source code referenced in this article uses Kafka\u0026rsquo;s trunk branch. I\u0026rsquo;ve pushed it to my personal repo for version alignment with this article:\nhttps://github.com/cyrilwongmy/kafka-src-reading\nIn the previous article, we explored the path of a Kafka request from the network layer to the KafkaApis class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a Fetch request, constructs the response, and sends log data using zero-copy techniques.\n",
+  "keywords": [
+    
+  ],
+  "articleBody": "This is part 4 of the Kafka series.\nPart 1: Introduction to Kafka TCP Fragmentation Part 2: Introduction to Reactor Pattern and Kafka’s Reactor Implementation Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3) The source code referenced in this article uses Kafka’s trunk branch. I’ve pushed it to my personal repo for version alignment with this article:\nhttps://github.com/cyrilwongmy/kafka-src-reading\nIn the previous article, we explored the path of a Kafka request from the network layer to the KafkaApis class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a Fetch request, constructs the response, and sends log data using zero-copy techniques.\nIf you’re not familiar zero-copy, there is an introductory video you can have a look.\n1. From Fetch Request to FileRecords Let’s jump straight into the implementation of KafkaApis.handleFetchRequest, which eventually calls ReplicaManager.fetchMessages. While the low-level file lookup logic can be skipped, it’s important to understand that what fetchMessages returns is primarily:\nA FileRecords object (a wrapper over JDK’s FileChannel) Some metadata Notably, the log data is not immediately loaded into memory. Instead, Kafka records the file offset range (start and end) that needs to be read later.\nThe key question now is: how does Kafka serialize and send this data over the network efficiently?\n2. Response Construction and Data Wrapping Inside handleFetchRequest, Kafka defines a callback processResponseCallback which handles the response construction after the fetch data is ready:\nreplicaManager.fetchMessages( params = params, fetchInfos = interesting, quota = replicationQuota(fetchRequest), responseCallback = processResponseCallback, ) Response Callback Logic The callback processResponseCallback performs the following:\nConstructs a map from TopicIdPartition to FetchResponseData.PartitionData For each partition, Kafka builds a PartitionData object and sets its fields (e.g., high watermark, log start offset, records) The records field here is the FileRecords object — a file reference, not in-memory data .setRecords(data.records) Final Response Kafka then calls:\nfetchContext.updateAndGenerateResponseData(partitions, nodeEndpoints.values.toSeq.asJava) This creates the final FetchResponse and sends it using:\nrequestChannel.sendResponse(request, fetchResponse, None) 3. Serialization and Zero-Copy Packaging Kafka serializes the response using this method chain:\nRequest.buildResponseSend() → RequestContext.buildResponseSend() → AbstractResponse.toSend() → SendBuilder.buildSend() Within SendBuilder.buildSend(), Kafka performs:\nHeader and payload size calculation Writes header and FetchResponseData into a buffer Writes the actual records using: _writable.writeInt(records.sizeInBytes()); _writable.writeRecords(records); // FileRecords path Zero-Copy Optimization When writing records, Kafka distinguishes between:\nMemoryRecords: in-memory buffers FileRecords: backed by disk files For FileRecords, Kafka flushes any pending in-memory data to a Send Queue item and then calls: addSend(records.toSend()) wraps the FileRecords into a Send implementation (e.g., DefaultRecordsSend) and append it to the Send queue in SendBuilder.\nSummary: Buffer and Send Queue Metadata is serialized into a ByteBuffer , converted to a SendQueue item when a Log data (FileRecords) is added as a Send Both are added into the SendBuilder queue Finally, Kafka returns a MultiRecordsSend object representing the full response 4. Network Sending with Zero-Copy Once the MultiRecordsSend is ready, it is enqueued into the Processor’s response queue:\nprocessor.enqueueResponse(response) The processor then sends the response using the selector’s send() method. Kafka wraps the data in a NetworkSend, which sets the send object (MultiRecordsSend) on the corresponding KafkaChannel.\nKafka uses non-blocking I/O (NIO) and epoll to handle write-read events. Each client request is processed sequentially — one must complete before the next begins. This is managed through mute/unmute logic.\nWriting to the Socket When the channel becomes writable, Kafka calls:\nsend.writeTo(transportLayer) This in turn invokes:\nMultiRecordsSend.writeTo(channel) Which iterates through its internal queue of Send objects and writes each one to the socket channel.\n5. Final Step: FileRecords Zero-Copy Transfer When the current Send is a DefaultRecordsSend, it delegates to the FileRecords.writeTo() method:\nreturn (int) destChannel.transferFrom(channel, position, count); Here, destChannel is Kafka’s PlaintextTransportLayer, and it ultimately calls JDK’s:\nfileChannel.transferTo(position, count, socketChannel); This leverages the zero-copy feature of the OS, enabling direct file-to-socket data transfer without copying to user-space memory.\nConclusion Kafka’s fetch response pipeline — from data preparation to network transmission — is a masterclass in efficient I/O:\nUses FileRecords to avoid premature loading into memory Defers serialization until needed Constructs responses with minimal data duplication Leverages JDK’s transferTo for zero-copy network sends The entire process showcases how to combine Java NIO, efficient design patterns, and clean abstractions to build a high-performance distributed system.\nKafka is not just a messaging system — it’s also an exemplar of elegant and performant I/O engineering.\n",
+  "wordCount" : "720",
+  "inLanguage": "en",
+  "datePublished": "2025-06-09T23:24:52-07:00",
+  "dateModified": "2025-06-09T23:24:52-07:00",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://cyrilwongmy.github.io/blog/04-kafka-fetch-request-and-zero-copy/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Mingyan's blog",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://cyrilwongmy.github.io/favicon.ico"
+    }
+  }
+}
+</script>
+</head>
+
+<body class="" id="top">
+<script>
+    if (localStorage.getItem("pref-theme") === "dark") {
+        document.body.classList.add('dark');
+    } else if (localStorage.getItem("pref-theme") === "light") {
+        document.body.classList.remove('dark')
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+
+</script>
+
+<header class="header">
+    <nav class="nav">
+        <div class="logo">
+            <a href="https://cyrilwongmy.github.io/" accesskey="h" title="Mingyan&#39;s blog (Alt + H)">Mingyan&#39;s blog</a>
+            <div class="logo-switches">
+                <button id="theme-toggle" accesskey="t" title="(Alt + T)" aria-label="Toggle theme">
+                    <svg id="moon" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="sun" xmlns="http://www.w3.org/2000/svg" width="24" height="18" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <ul id="menu">
+        </ul>
+    </nav>
+</header>
+<main class="main">
+
+<article class="post-single">
+  <header class="post-header">
+    
+    <h1 class="post-title entry-hint-parent">
+      Kafka Deep Dive: How Fetch Responses Are Built and Zero-Copy Works (Part 4)
+    </h1>
+    <div class="post-meta"><span title='2025-06-09 23:24:52 -0700 PDT'>June 9, 2025</span>
+
+</div>
+  </header> 
+  <div class="post-content"><p>This is part 4 of the Kafka series.</p>
+<ul>
+<li><a href="https://cyrilwongmy.github.io/blog/01-kafka-01-tcp-fragmentation/">Part 1: Introduction to Kafka TCP Fragmentation</a></li>
+<li><a href="https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/">Part 2: Introduction to Reactor Pattern and Kafka&rsquo;s Reactor Implementation</a></li>
+<li><a href="https://cyrilwongmy.github.io/blog/03-kafka-03-kafka-message-protocol/">Part 3: An introduction to Kafka’s High‑Performance Binary RPC Protocol (Part 3)</a></li>
+</ul>
+<p>The source code referenced in this article uses Kafka&rsquo;s trunk branch. I&rsquo;ve pushed it to my personal repo for version alignment with this article:</p>
+<p><a href="https://github.com/cyrilwongmy/kafka-src-reading">https://github.com/cyrilwongmy/kafka-src-reading</a></p>
+<p>In the <a href="https://cyrilwongmy.github.io/blog/02-kafka-02-kafka-reactor/">previous article,</a> we explored the path of a Kafka request from the network layer to the <code>KafkaApis</code> class. However, we didn’t cover much about how Kafka processes and returns a response. This article focuses specifically on how Kafka handles a <strong>Fetch request</strong>, constructs the response, and sends log data using <strong>zero-copy</strong> techniques.</p>
+<p>If you’re not familiar zero-copy, there is an introductory <a href="https://www.youtube.com/watch?v=UNUz1-msbOM">video</a> you can have a look.</p>
+<h2 id="1-from-fetch-request-to-filerecords">1. From Fetch Request to FileRecords<a hidden class="anchor" aria-hidden="true" href="#1-from-fetch-request-to-filerecords">#</a></h2>
+<p>Let’s jump straight into the implementation of <code>KafkaApis.handleFetchRequest</code>, which eventually calls <code>ReplicaManager.fetchMessages</code>. While the low-level file lookup logic can be skipped, it’s important to understand that what <code>fetchMessages</code> returns is primarily:</p>
+<ul>
+<li>A <code>FileRecords</code> object (a wrapper over JDK’s <code>FileChannel</code>)</li>
+<li>Some metadata</li>
+</ul>
+<p>Notably, <strong>the log data is not immediately loaded into memory</strong>. Instead, Kafka records the file offset range (start and end) that needs to be read later.</p>
+<p>The key question now is: <strong>how does Kafka serialize and send this data over the network efficiently?</strong></p>
+<h2 id="2-response-construction-and-data-wrapping">2. Response Construction and Data Wrapping<a hidden class="anchor" aria-hidden="true" href="#2-response-construction-and-data-wrapping">#</a></h2>
+<p>Inside <code>handleFetchRequest</code>, Kafka defines a callback <code>processResponseCallback</code> which handles the response construction after the fetch data is ready:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>replicaManager.<span style="color:#a6e22e">fetchMessages</span>(
+</span></span><span style="display:flex;"><span>  params <span style="color:#f92672">=</span> params,
+</span></span><span style="display:flex;"><span>  fetchInfos <span style="color:#f92672">=</span> interesting,
+</span></span><span style="display:flex;"><span>  quota <span style="color:#f92672">=</span> replicationQuota(fetchRequest),
+</span></span><span style="display:flex;"><span>  responseCallback <span style="color:#f92672">=</span> processResponseCallback,
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre></div><h3 id="response-callback-logic">Response Callback Logic<a hidden class="anchor" aria-hidden="true" href="#response-callback-logic">#</a></h3>
+<p>The callback <code>processResponseCallback</code> performs the following:</p>
+<ul>
+<li>Constructs a map from <code>TopicIdPartition</code> to <code>FetchResponseData.PartitionData</code></li>
+<li>For each partition, Kafka builds a <code>PartitionData</code> object and sets its fields (e.g., high watermark, log start offset, records)</li>
+<li>The <code>records</code> field here is the <code>FileRecords</code> object — a file reference, not in-memory data</li>
+</ul>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>.<span style="color:#a6e22e">setRecords</span>(data.<span style="color:#a6e22e">records</span>)
+</span></span></code></pre></div><h3 id="final-response">Final Response<a hidden class="anchor" aria-hidden="true" href="#final-response">#</a></h3>
+<p>Kafka then calls:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>fetchContext.<span style="color:#a6e22e">updateAndGenerateResponseData</span>(partitions, nodeEndpoints.<span style="color:#a6e22e">values</span>.<span style="color:#a6e22e">toSeq</span>.<span style="color:#a6e22e">asJava</span>)
+</span></span></code></pre></div><p>This creates the final <code>FetchResponse</code> and sends it using:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>requestChannel.<span style="color:#a6e22e">sendResponse</span>(request, fetchResponse, None)
+</span></span></code></pre></div><h2 id="3-serialization-and-zero-copy-packaging">3. Serialization and Zero-Copy Packaging<a hidden class="anchor" aria-hidden="true" href="#3-serialization-and-zero-copy-packaging">#</a></h2>
+<p>Kafka serializes the response using this method chain:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-scala" data-lang="scala"><span style="display:flex;"><span><span style="color:#a6e22e">Request</span><span style="color:#f92672">.</span>buildResponseSend<span style="color:#f92672">()</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">→</span> <span style="color:#a6e22e">RequestContext</span><span style="color:#f92672">.</span>buildResponseSend<span style="color:#f92672">()</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">→</span> <span style="color:#a6e22e">AbstractResponse</span><span style="color:#f92672">.</span>toSend<span style="color:#f92672">()</span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">→</span> <span style="color:#a6e22e">SendBuilder</span><span style="color:#f92672">.</span>buildSend<span style="color:#f92672">()</span>
+</span></span></code></pre></div><p>Within <code>SendBuilder.buildSend()</code>, Kafka performs:</p>
+<ol>
+<li>Header and payload size calculation</li>
+<li>Writes header and <code>FetchResponseData</code> into a buffer</li>
+<li>Writes the actual <code>records</code> using:</li>
+</ol>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-scala" data-lang="scala"><span style="display:flex;"><span><span style="color:#a6e22e">_writable</span><span style="color:#f92672">.</span>writeInt<span style="color:#f92672">(</span>records<span style="color:#f92672">.</span>sizeInBytes<span style="color:#f92672">());</span>
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">_writable</span><span style="color:#f92672">.</span>writeRecords<span style="color:#f92672">(</span>records<span style="color:#f92672">);</span> <span style="color:#75715e">// FileRecords path
+</span></span></span></code></pre></div><h3 id="zero-copy-optimization">Zero-Copy Optimization<a hidden class="anchor" aria-hidden="true" href="#zero-copy-optimization">#</a></h3>
+<p>When writing <code>records</code>, Kafka distinguishes between:</p>
+<ul>
+<li><code>MemoryRecords</code>: in-memory buffers</li>
+<li><code>FileRecords</code>: backed by disk files</li>
+</ul>
+<p>For <code>FileRecords</code>, Kafka flushes any pending in-memory data to a Send Queue item and then calls: <code>addSend(records.toSend())</code> wraps the <code>FileRecords</code> into a <code>Send</code> implementation (e.g., <code>DefaultRecordsSend</code>) and append it to the <strong>Send queue</strong> in <code>SendBuilder</code>.</p>
+<h3 id="summary-buffer-and-send-queue">Summary: Buffer and Send Queue<a hidden class="anchor" aria-hidden="true" href="#summary-buffer-and-send-queue">#</a></h3>
+<ul>
+<li>Metadata is serialized into a <code>ByteBuffer</code> , converted to a SendQueue item when a</li>
+<li>Log data (<code>FileRecords</code>) is added as a <code>Send</code></li>
+<li>Both are added into the <code>SendBuilder</code> queue</li>
+<li>Finally, Kafka returns a <code>MultiRecordsSend</code> object representing the full response</li>
+</ul>
+<h2 id="4-network-sending-with-zero-copy">4. Network Sending with Zero-Copy<a hidden class="anchor" aria-hidden="true" href="#4-network-sending-with-zero-copy">#</a></h2>
+<p>Once the <code>MultiRecordsSend</code> is ready, it is enqueued into the Processor&rsquo;s response queue:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-scala" data-lang="scala"><span style="display:flex;"><span>processor<span style="color:#f92672">.</span>enqueueResponse<span style="color:#f92672">(</span>response<span style="color:#f92672">)</span>
+</span></span></code></pre></div><p>The processor then sends the response using the selector’s <code>send()</code> method. Kafka wraps the data in a <code>NetworkSend</code>, which sets the send object (<code>MultiRecordsSend</code>) on the corresponding <code>KafkaChannel</code>.</p>
+<p>Kafka uses <strong>non-blocking I/O (NIO)</strong> and <code>epoll</code> to handle write-read events. Each client request is processed sequentially — one must complete before the next begins. This is managed through <strong>mute/unmute</strong> logic.</p>
+<h3 id="writing-to-the-socket">Writing to the Socket<a hidden class="anchor" aria-hidden="true" href="#writing-to-the-socket">#</a></h3>
+<p>When the channel becomes writable, Kafka calls:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>send.<span style="color:#a6e22e">writeTo</span>(transportLayer)
+</span></span></code></pre></div><p>This in turn invokes:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>MultiRecordsSend.<span style="color:#a6e22e">writeTo</span>(channel)
+</span></span></code></pre></div><p>Which iterates through its internal queue of <code>Send</code> objects and writes each one to the socket channel.</p>
+<hr>
+<h2 id="5-final-step-filerecords-zero-copy-transfer">5. Final Step: FileRecords Zero-Copy Transfer<a hidden class="anchor" aria-hidden="true" href="#5-final-step-filerecords-zero-copy-transfer">#</a></h2>
+<p>When the current <code>Send</code> is a <code>DefaultRecordsSend</code>, it delegates to the <code>FileRecords.writeTo()</code> method:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span><span style="color:#66d9ef">return</span> (<span style="color:#66d9ef">int</span>) destChannel.<span style="color:#a6e22e">transferFrom</span>(channel, position, count);
+</span></span></code></pre></div><p>Here, <code>destChannel</code> is Kafka’s <code>PlaintextTransportLayer</code>, and it ultimately calls JDK’s:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-java" data-lang="java"><span style="display:flex;"><span>fileChannel.<span style="color:#a6e22e">transferTo</span>(position, count, socketChannel);
+</span></span></code></pre></div><p>This leverages the <strong>zero-copy</strong> feature of the OS, enabling direct file-to-socket data transfer <strong>without copying to user-space memory</strong>.</p>
+<hr>
+<h2 id="conclusion">Conclusion<a hidden class="anchor" aria-hidden="true" href="#conclusion">#</a></h2>
+<p>Kafka’s fetch response pipeline — from data preparation to network transmission — is a masterclass in efficient I/O:</p>
+<ul>
+<li>Uses <code>FileRecords</code> to avoid premature loading into memory</li>
+<li>Defers serialization until needed</li>
+<li>Constructs responses with minimal data duplication</li>
+<li>Leverages JDK’s <code>transferTo</code> for zero-copy network sends</li>
+</ul>
+<p>The entire process showcases how to combine <strong>Java NIO</strong>, <strong>efficient design patterns</strong>, and <strong>clean abstractions</strong> to build a high-performance distributed system.</p>
+<p>Kafka is not just a messaging system — it’s also an exemplar of <strong>elegant and performant I/O engineering</strong>.</p>
+
+
+  </div>
+
+  <footer class="post-footer">
+    <ul class="post-tags">
+    </ul>
+  </footer>
+</article>
+    </main>
+    
+<footer class="footer">
+        <span>&copy; 2025 <a href="https://cyrilwongmy.github.io/">Mingyan&#39;s blog</a></span> · 
+
+    <span>
+        Powered by
+        <a href="https://gohugo.io/" rel="noopener noreferrer" target="_blank">Hugo</a> &
+        <a href="https://github.com/adityatelange/hugo-PaperMod/" rel="noopener" target="_blank">PaperMod</a>
+    </span>
+</footer>
+<a href="#top" aria-label="go to top" title="Go to Top (Alt + G)" class="top-link" id="top-link" accesskey="g">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 6" fill="currentColor">
+        <path d="M12 6H0l6-6z" />
+    </svg>
+</a>
+
+<script>
+    let menu = document.getElementById('menu')
+    if (menu) {
+        menu.scrollLeft = localStorage.getItem("menu-scroll-position");
+        menu.onscroll = function () {
+            localStorage.setItem("menu-scroll-position", menu.scrollLeft);
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener("click", function (e) {
+            e.preventDefault();
+            var id = this.getAttribute("href").substr(1);
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView({
+                    behavior: "smooth"
+                });
+            } else {
+                document.querySelector(`[id='${decodeURIComponent(id)}']`).scrollIntoView();
+            }
+            if (id === "top") {
+                history.replaceState(null, null, " ");
+            } else {
+                history.pushState(null, null, `#${id}`);
+            }
+        });
+    });
+
+</script>
+<script>
+    var mybutton = document.getElementById("top-link");
+    window.onscroll = function () {
+        if (document.body.scrollTop > 800 || document.documentElement.scrollTop > 800) {
+            mybutton.style.visibility = "visible";
+            mybutton.style.opacity = "1";
+        } else {
+            mybutton.style.visibility = "hidden";
+            mybutton.style.opacity = "0";
+        }
+    };
+
+</script>
+<script>
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        if (document.body.className.includes("dark")) {
+            document.body.classList.remove('dark');
+            localStorage.setItem("pref-theme", 'light');
+        } else {
+            document.body.classList.add('dark');
+            localStorage.setItem("pref-theme", 'dark');
+        }
+    })
+
+</script>
+</body>
+
+</html>
